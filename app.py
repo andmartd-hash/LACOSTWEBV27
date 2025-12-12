@@ -8,85 +8,66 @@ st.set_page_config(page_title="LACostWeb V29", layout="wide", page_icon="📊")
 
 st.markdown("""
     <style>
-    /* 1. ESTILO ULTRA COMPACTO (Global) */
-    html, body, [class*="css"]  {
-        font-size: 11px !important; /* Reducimos un punto más */
-    }
-    
-    /* Títulos */
+    /* ESTILO ULTRA COMPACTO */
+    html, body, [class*="css"]  { font-size: 11px !important; }
     h1 { font-size: 1.4rem !important; margin-bottom: 0.5rem !important; }
     h2 { font-size: 1.2rem !important; margin-top: 0.5rem !important; }
     h3 { font-size: 1.0rem !important; margin-top: 0.5rem !important; }
-    
-    /* Inputs y Selectbox COMPACTOS */
-    .stSelectbox div[data-baseweb="select"] > div {
-        font-size: 11px;
-        min-height: 28px;
-        padding: 0px 4px;
+    .stSelectbox div[data-baseweb="select"] > div, .stTextInput input, .stNumberInput input, .stDateInput input {
+        font-size: 11px; min-height: 28px; padding: 0px 4px;
     }
-    .stTextInput input, .stNumberInput input, .stDateInput input {
-        font-size: 11px;
-        min-height: 28px;
-        padding: 0px 4px;
-    }
-    div[data-baseweb="input"] {
-        min-height: 28px;
-    }
-    
-    /* Sidebar Compacta */
-    section[data-testid="stSidebar"] .block-container {
-        padding-top: 1rem;
-        padding-bottom: 1rem;
-    }
-    section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"] {
-        gap: 0.5rem; /* Menos espacio entre elementos del sidebar */
-    }
-
-    /* Reducir márgenes del cuerpo principal */
-    .block-container {
-        padding-top: 0.5rem;
-        padding-bottom: 2rem;
-    }
-    
-    /* Métricas */
-    .stMetric { 
-        background-color: #f0f2f6; 
-        padding: 4px 8px; 
-        border-radius: 4px; 
-    }
+    div[data-baseweb="input"] { min-height: 28px; }
+    section[data-testid="stSidebar"] .block-container { padding-top: 1rem; padding-bottom: 1rem; }
+    section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"] { gap: 0.5rem; }
+    .block-container { padding-top: 0.5rem; padding-bottom: 2rem; }
+    .stMetric { background-color: #f0f2f6; padding: 4px 8px; border-radius: 4px; }
     .stMetric label { font-size: 10px !important; }
     .stMetric div[data-testid="stMetricValue"] { font-size: 16px !important; }
-    
     </style>
     """, unsafe_allow_html=True)
 
 st.title("📊 LACostWeb V29")
 st.markdown("Herramienta de costeo **UI_CONFIG V19**.")
 
+# --- BARRA LATERAL: CONFIGURACIÓN REGIONAL ---
+st.sidebar.header("⚙️ Configuración Regional")
+formato_num = st.sidebar.radio(
+    "Formato Números CSV", 
+    ["1,234.56 (US/Estándar)", "1.234,56 (Latino/Euro)"],
+    index=1, # Default Latino por seguridad si vienes de Excel español
+    help="Si ves costos muy bajos (ej: 0.21), cambia esta opción."
+)
+
 # --- FUNCIÓN DE LIMPIEZA DE DATOS ---
 def clean_decimal(val):
     if pd.isna(val) or val == "": return 0.0
     s_val = str(val).strip().replace("%", "").replace("$", "").replace("USD", "").replace(" ", "")
+    
     try:
-        return float(s_val)
+        if "Latino" in formato_num:
+            # LATINO: Eliminar puntos de miles, cambiar coma decimal por punto
+            # Ej: 304.504,20 -> 304504.20
+            clean = s_val.replace(".", "").replace(",", ".")
+            return float(clean)
+        else:
+            # US: Eliminar comas de miles
+            # Ej: 304,504.20 -> 304504.20
+            clean = s_val.replace(",", "")
+            return float(clean)
     except:
-        try:
-            return float(s_val.replace(".", "").replace(",", "."))
-        except:
-            return 0.0
+        return 0.0
 
 # --- 1. CARGA DE DATOS ---
 @st.cache_data
 def load_data():
     try:
-        # Leemos CSVs
-        # Nota: Asegúrate que los encabezados estén en la fila 1 (header=0)
-        df_c = pd.read_csv("countries.csv")
-        df_o = pd.read_csv("offering.csv")
-        df_s = pd.read_csv("slc.csv")
-        df_r = pd.read_csv("risk.csv")
-        df_lp = pd.read_csv("lplat.csv")
-        df_lb = pd.read_csv("lband.csv")
+        # LEEMOS TODO COMO TEXTO (dtype=str) PARA EVITAR QUE PANDAS ADIVINE MAL EL FORMATO
+        df_c = pd.read_csv("countries.csv", dtype=str)
+        df_o = pd.read_csv("offering.csv", dtype=str)
+        df_s = pd.read_csv("slc.csv", dtype=str)
+        df_r = pd.read_csv("risk.csv", dtype=str)
+        df_lp = pd.read_csv("lplat.csv", dtype=str)
+        df_lb = pd.read_csv("lband.csv", dtype=str)
         return df_c, df_o, df_s, df_r, df_lp, df_lb
     except Exception:
         return None, None, None, None, None, None
@@ -94,7 +75,7 @@ def load_data():
 df_countries, df_offering, df_slc, df_risk, df_lplat, df_lband = load_data()
 
 if df_countries is None:
-    st.error("⚠️ Error Crítico: Faltan archivos CSV. Verifica nombres en GitHub.")
+    st.error("⚠️ Error Crítico: Faltan archivos CSV.")
     st.stop()
 
 # --- FUNCIONES AUXILIARES ---
@@ -106,7 +87,8 @@ def calcular_duracion(inicio, fin):
 # ==========================================
 # BARRA LATERAL (SIDEBAR) - DATOS Y CONFIG
 # ==========================================
-st.sidebar.header("📝 Configuración y Cliente")
+st.sidebar.markdown("---")
+st.sidebar.subheader("📝 Cliente y Contrato")
 
 # 1. ID y Cliente
 id_cot = st.sidebar.text_input("ID Cotización", "COT-2025-V29")
@@ -125,7 +107,6 @@ st.sidebar.markdown("---")
 st.sidebar.subheader("🌎 Parámetros Económicos")
 
 # 3. País y Moneda
-# Filtramos columnas de países evitando metadatos
 cols_paises = [c for c in df_countries.columns if c not in ['Scope', 'Country', 'Unnamed: 0', 'Currency', 'ER', 'Tax']]
 pais = st.sidebar.selectbox("País", cols_paises)
 
@@ -174,7 +155,6 @@ st.subheader("🛠️ 1. Offering / Service Cost")
 o1, o2, _ = st.columns([3, 1, 2]) 
 offer_list = df_offering['Offering'].unique()
 offer_sel = o1.selectbox("Offering", offer_list)
-# Info extra
 row_off = df_offering[df_offering['Offering'] == offer_sel].iloc[0]
 o2.text_input("Info", f"L40: {row_off.get('L40','-')} | Conga: {row_off.get('Load in conga','-')}", disabled=True)
 
@@ -231,15 +211,14 @@ tipo_fuente = rad1.radio("Fuente Datos", ["Machine Category", "Brand Rate Full"]
 
 if tipo_fuente == "Machine Category":
     df_active = df_lplat
-    # LPLAT (C): Item está en columna 2 (C)
-    # Matriz Costos E:M inicia en columna 4 (E)
+    # LPLAT (C): Columna 2
     col_item_idx = 2 
 else:
     df_active = df_lband
-    # LBAND (D): Item está en columna 3 (D)
+    # LBAND (D): Columna 3
     col_item_idx = 3
 
-# Cargar Items (Columna C para LPLAT, D para LBAND)
+# Cargar Items
 try:
     items_disp = df_active.iloc[:, col_item_idx].dropna().unique().tolist()
 except: items_disp = []
@@ -250,17 +229,13 @@ item_maq = rad2.selectbox("Item", items_disp)
 precio_mes_raw = 0.0
 if item_maq:
     try:
-        # Filtramos por la columna del item
         fila = df_active[df_active.iloc[:, col_item_idx] == item_maq]
-        
-        # Buscamos la columna del país seleccionado
-        # Las columnas de costo están en la matriz E:M, que corresponde a los nombres de países
         if not fila.empty and pais in fila.columns:
+            # Aquí aplicamos clean_decimal respetando el formato seleccionado
             precio_mes_raw = clean_decimal(fila[pais].values[0])
     except: pass
 
 # Convertir SIEMPRE a USD para el campo "Monthly Cost (USD)"
-# Logica: Dato CSV (Local) / ER = USD
 if tasa_er > 0:
     precio_mes_usd = precio_mes_raw / tasa_er
 else:
@@ -278,12 +253,6 @@ dur_man = calcular_duracion(fm_ini, fm_fin)
 m4.metric("Meses", dur_man)
 
 # Cálculo Total Manage
-# Formula V19: Monthly cost (Local) * Horas * Duration
-# Pero si Currency = Local -> dividir entre ER (Esto en UI_CONFIG está confuso,
-# pero la lógica estándar es: Costo Total siempre se calcula, luego se muestra en la moneda deseada).
-# Tu petición: "traer el costo ... en dolares" en el campo Monthly Cost.
-# Usaremos ese Monthly Cost USD como base para el total.
-
 total_man_usd = precio_mes_usd * horas * dur_man
 total_man_final = total_man_usd * tasa_er if moneda_tipo == "Local" else total_man_usd
 

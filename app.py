@@ -237,11 +237,14 @@ tipo_fuente = rad1.radio("Fuente Datos", ["Machine Category", "Brand Rate Full"]
 
 if tipo_fuente == "Machine Category":
     df_active = df_lplat
+    # CORREGIDO: LPLAT usa columna C (índice 2) para el nombre del item
+    col_item_idx = 2 
 else:
     df_active = df_lband
+    # CORREGIDO: LBAND usa columna D (índice 3) para el nombre del item, "Def"
+    col_item_idx = 3
 
 # Items
-col_item_idx = 1
 try:
     items_disp = df_active.iloc[:, col_item_idx].dropna().unique().tolist()
 except: items_disp = []

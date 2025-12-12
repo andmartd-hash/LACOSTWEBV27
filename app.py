@@ -29,31 +29,17 @@ st.markdown("""
 st.title("📊 LACostWeb V29")
 st.markdown("Herramienta de costeo **UI_CONFIG V19**.")
 
-# --- BARRA LATERAL: CONFIGURACIÓN REGIONAL ---
-st.sidebar.header("⚙️ Configuración Regional")
-formato_num = st.sidebar.radio(
-    "Formato Números CSV", 
-    ["1,234.56 (US/Estándar)", "1.234,56 (Latino/Euro)"],
-    index=1, # Default Latino por seguridad si vienes de Excel español
-    help="Si ves costos muy bajos (ej: 0.21), cambia esta opción."
-)
-
 # --- FUNCIÓN DE LIMPIEZA DE DATOS ---
 def clean_decimal(val):
     if pd.isna(val) or val == "": return 0.0
+    # Limpieza de símbolos básicos
     s_val = str(val).strip().replace("%", "").replace("$", "").replace("USD", "").replace(" ", "")
     
     try:
-        if "Latino" in formato_num:
-            # LATINO: Eliminar puntos de miles, cambiar coma decimal por punto
-            # Ej: 304.504,20 -> 304504.20
-            clean = s_val.replace(".", "").replace(",", ".")
-            return float(clean)
-        else:
-            # US: Eliminar comas de miles
-            # Ej: 304,504.20 -> 304504.20
-            clean = s_val.replace(",", "")
-            return float(clean)
+        # LÓGICA ESTÁNDAR (US): 1,234.56
+        # Eliminamos comas de miles, mantenemos punto decimal
+        clean = s_val.replace(",", "")
+        return float(clean)
     except:
         return 0.0
 
@@ -61,7 +47,7 @@ def clean_decimal(val):
 @st.cache_data
 def load_data():
     try:
-        # LEEMOS TODO COMO TEXTO (dtype=str) PARA EVITAR QUE PANDAS ADIVINE MAL EL FORMATO
+        # LEEMOS TODO COMO TEXTO (dtype=str) PARA EVITAR ERRORES DE PARSEO
         df_c = pd.read_csv("countries.csv", dtype=str)
         df_o = pd.read_csv("offering.csv", dtype=str)
         df_s = pd.read_csv("slc.csv", dtype=str)
@@ -231,7 +217,7 @@ if item_maq:
     try:
         fila = df_active[df_active.iloc[:, col_item_idx] == item_maq]
         if not fila.empty and pais in fila.columns:
-            # Aquí aplicamos clean_decimal respetando el formato seleccionado
+            # Aquí aplicamos clean_decimal en modo US/Standard por defecto
             precio_mes_raw = clean_decimal(fila[pais].values[0])
     except: pass
 

@@ -231,8 +231,10 @@ offer_man_sel = m_off1.selectbox("Offering (Manage)", offer_list, key="offer_man
 row_off_man = df_offering[df_offering['Offering'] == offer_man_sel].iloc[0]
 m_off2.text_input("Info (Manage)", f"L40: {row_off_man.get('L40','-')} | Conga: {row_off_man.get('Load in conga','-')}", disabled=True)
 
-# 2. SELECCIÓN DE CATEGORÍA Y MÁQUINA
-rad1, rad2, _ = st.columns([1, 2, 1])
+# 2. SELECCIÓN DE CATEGORÍA, MÁQUINA Y COSTO MENSUAL
+# Ajuste de layout: Fuente | Item (Más estrecho) | Monthly Cost (Campo Nuevo) | Espacio
+rad1, rad2, rad3, _ = st.columns([1.2, 1.2, 1, 2.6]) 
+
 tipo_fuente = rad1.radio("Fuente Datos", ["Machine Category", "Brand Rate Full"])
 
 if tipo_fuente == "Machine Category":
@@ -261,13 +263,14 @@ if item_maq:
 
 # --- CORRECCIÓN DE LÓGICA DE MONEDA (Monthly Cost) ---
 # Lógica: "si Currency=USD dividir el costo entre ER, si no multiplicar el costo *1"
-# Interpretación: El dato viene en Local. Si seleccionamos USD, dividimos.
 if moneda_tipo == "USD" and tasa_er > 0:
     precio_mes_final = precio_mes_raw / tasa_er
 else:
     precio_mes_final = precio_mes_raw
 
-st.write(f"Costo Mensual Base: **{simbolo} {precio_mes_final:,.2f}**")
+# (NUEVO) Campo "Monthly Cost" visualizado como input desactivado
+rad3.text_input("Monthly Cost", value=f"{simbolo} {precio_mes_final:,.2f}", disabled=True)
+
 
 # Manage Inputs
 m1, m2, m3, m4, _ = st.columns([1, 1, 1, 1, 2])

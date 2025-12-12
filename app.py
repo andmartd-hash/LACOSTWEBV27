@@ -2,16 +2,19 @@ import streamlit as st
 import pandas as pd
 import os
 
-# --- Configuración de la Página ---
-st.set_page_config(page_title="Cotizador V17", layout="wide", page_icon="🏗️")
+# --- Configuración de la App ---
+st.set_page_config(page_title="Cotizador V18", layout="wide", page_icon="🏗️")
 
-# --- 1. CARGADOR DE DATOS INTELIGENTE (V17) ---
+# --- 1. CARGADOR INTELIGENTE (Detecta V18) ---
 @st.cache_data
-def load_data_v17():
-    # Palabras clave para identificar cada archivo en tu carpeta
-    # El sistema busca archivos que contengan estas palabras
+def load_data_v18():
+    """
+    Busca archivos en la carpeta que contengan las palabras clave.
+    Funciona con nombres largos (V18-BASE...) o cortos.
+    """
+    # Mapa de: Clave Interna -> Palabra a buscar en el nombre del archivo
     keywords = {
-        "config":    "UI_CONFIG",  # Busca 'UI_CONFIG'
+        "config":    "UI_CONFIG",
         "countries": "countries",
         "risk":      "risk",
         "offering":  "offering",
@@ -24,121 +27,119 @@ def load_data_v17():
     loaded_data = {}
     missing_files = []
     
-    # Listamos todos los archivos en la carpeta actual
-    all_files = os.listdir('.')
+    # Listamos archivos reales en el servidor
+    files_in_dir = [f for f in os.listdir('.') if f.endswith('.csv')]
     
     for key, search_term in keywords.items():
-        found = None
-        # Buscamos coincidencias (case insensitive)
-        for f in all_files:
-            if search_term.lower() in f.lower() and f.endswith('.csv'):
-                found = f
+        found_filename = None
+        
+        # Buscamos coincidencias (insensible a mayúsculas)
+        for f in files_in_dir:
+            if search_term.lower() in f.lower():
+                found_filename = f
                 break
         
-        if found:
+        if found_filename:
             try:
-                # Leemos el CSV encontrado
-                df = pd.read_csv(found)
-                df.columns = df.columns.str.strip() # Limpiamos cabeceras
-                df = df.dropna(how='all') # Limpiamos filas vacías
+                df = pd.read_csv(found_filename)
+                df.columns = df.columns.str.strip() # Limpiar cabeceras
+                df = df.dropna(how='all') # Eliminar vacíos
                 loaded_data[key] = df
             except Exception as e:
-                st.error(f"Error leyendo {found}: {e}")
+                st.error(f"Error leyendo {found_filename}: {e}")
         else:
             missing_files.append(search_term)
             
     return loaded_data, missing_files
 
 def main():
-    st.title("🏗️ LACOSTWEB V17 - Generador de Interfaz")
+    st.title("🏗️ LACOSTWEB V18")
 
-    # Cargar los datos
-    dfs, missing = load_data_v17()
+    # Cargar datos
+    dfs, missing = load_data_v18()
 
-    # Validaciones iniciales
+    # Validaciones
     if missing:
         st.warning(f"⚠️ Atención: No encuentro archivos para: {', '.join(missing)}")
-        st.info("Asegúrate de que los archivos 'V17-BASE...' estén subidos en GitHub.")
+        st.info("Asegúrate de haber subido los archivos CSV a GitHub.")
     
     if "config" not in dfs:
-        st.error("❌ ERROR CRÍTICO: No se encuentra el archivo UI_CONFIG.")
+        st.error("❌ ERROR: No se encuentra el archivo UI_CONFIG.")
         st.stop()
 
     # --- 2. MOTOR DE INTERFAZ (Tu lógica de 4 columnas) ---
     df_config = dfs["config"]
     
-    # Detectamos las 4 columnas por posición (0, 1, 2, 3)
+    # Detectamos columnas por posición (0, 1, 2, 3)
     # Col 0: Nombre del Campo
-    # Col 1: Fuente de Datos (Tabla)
-    # Col 2: Lógica / Instrucción
-    # Col 3: Ejemplo / Valor por defecto
+    # Col 1: Fuente (Tabla)
+    # Col 2: Lógica (Instrucción)
+    # Col 3: Ejemplo (Valor por defecto)
     try:
-        cols = df_config.columns
-        c_nombre  = cols[0]
-        c_fuente  = cols[1]
-        c_logica  = cols[2]
-        c_ejemplo = cols[3]
+        col_nombre  = df_config.columns[0]
+        col_fuente  = df_config.columns[1]
+        col_logica  = df_config.columns[2]
+        col_ejemplo = df_config.columns[3]
     except IndexError:
-        st.error("⚠️ El archivo UI_CONFIG debe tener al menos 4 columnas (Nombre, Fuente, Lógica, Ejemplo).")
+        st.error("⚠️ El archivo UI_CONFIG debe tener al menos 4 columnas.")
         st.stop()
 
     inputs_usuario = {}
 
-    with st.form("form_v17"):
+    with st.form("form_v18"):
         st.subheader("Configuración del Escenario")
         
-        # Grid de 2 columnas para organizar visualmente
-        col_izq, col_der = st.columns(2)
+        # Columnas para organizar
+        c1, c2 = st.columns(2)
 
         for idx, row in df_config.iterrows():
-            if pd.isna(row[c_nombre]): continue
+            if pd.isna(row[col_nombre]): continue
             
-            # Extraemos la data de la fila
-            label = str(row[c_nombre]).strip()
-            fuente = str(row[c_fuente]).strip().lower() if pd.notna(row[c_fuente]) else ""
-            logica = str(row[c_logica]).strip() if pd.notna(row[c_logica]) else ""
-            ejemplo = str(row[c_ejemplo]).strip() if pd.notna(row[c_ejemplo]) else ""
+            # --- Extraer datos de las 4 columnas ---
+            label = str(row[col_nombre]).strip()
+            fuente = str(row[col_fuente]).strip().lower() if pd.notna(row[col_fuente]) else ""
+            logica = str(row[col_logica]).strip() if pd.notna(row[col_logica]) else ""
+            ejemplo = str(row[col_ejemplo]).strip() if pd.notna(row[col_ejemplo]) else ""
             
-            # ID único para Streamlit
-            uid = f"field_{idx}"
-            target_col = col_izq if idx % 2 == 0 else col_der
+            # ID único
+            uid = f"f_{idx}"
+            target_col = c1 if idx % 2 == 0 else c2
 
             with target_col:
-                # --- DECISIÓN: ¿LISTA O TEXTO? ---
+                # --- LÓGICA: LISTA O TEXTO ---
                 
-                tabla_asociada = None
-                # Buscamos si la fuente coincide con algún archivo cargado
+                tabla_datos = None
+                # Si hay fuente, buscamos la tabla correspondiente
                 if fuente:
-                    for key in dfs.keys():
-                        if fuente in key or key in fuente:
-                            tabla_asociada = dfs[key]
+                    for k in dfs.keys():
+                        if fuente in k or k in fuente:
+                            tabla_datos = dfs[k]
                             break
                 
-                if tabla_asociada is not None:
-                    # ES UNA LISTA DESPLEGABLE
-                    opciones = tabla_asociada.iloc[:, 0].unique()
+                if tabla_datos is not None:
+                    # ES LISTA (DROPDOWN)
+                    opciones = tabla_datos.iloc[:, 0].unique()
                     inputs_usuario[label] = st.selectbox(
                         label, 
                         opciones, 
                         key=uid,
-                        help=f"ℹ️ {logica}" # Tu instrucción va aquí
+                        help=f"ℹ️ {logica}" # Columna 3: Lógica
                     )
                 else:
-                    # ES UN CAMPO DE TEXTO/NÚMERO
+                    # ES CAMPO MANUAL (Usamos Columna 4: Ejemplo como default)
                     inputs_usuario[label] = st.text_input(
                         label, 
-                        value=ejemplo, # Tu ejemplo va aquí como valor por defecto
+                        value=ejemplo, 
                         key=uid,
-                        help=f"ℹ️ {logica}"
+                        help=f"ℹ️ {logica}" # Columna 3: Lógica
                     )
 
         st.markdown("---")
-        submitted = st.form_submit_button("✅ Procesar Datos", type="primary")
+        submitted = st.form_submit_button("✅ Calcular", type="primary")
 
     # --- 3. RESULTADOS ---
     if submitted:
-        st.success("Datos capturados correctamente.")
-        st.write("Valores listos para procesar:")
+        st.success("Datos capturados:")
         st.json(inputs_usuario)
 
 if __name__ == "__main__":

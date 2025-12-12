@@ -4,17 +4,51 @@ from datetime import date
 from dateutil.relativedelta import relativedelta
 
 # --- CONFIGURACIÓN VISUAL ---
-st.set_page_config(page_title="Cotizador IBM V19", layout="wide", page_icon="📊")
+st.set_page_config(page_title="LACostWeb V29", layout="wide", page_icon="📊")
 
 st.markdown("""
     <style>
-    .big-font { font-size:20px !important; font-weight: bold; color: #0f62fe; }
-    .stMetric { background-color: #f4f4f4; padding: 10px; border-radius: 5px; }
+    /* 1. DISMINUCIÓN DE TAMAÑO DE LETRA Y ESPACIOS (Compacto) */
+    html, body, [class*="css"]  {
+        font-size: 12px !important; /* Letra más pequeña general */
+    }
+    
+    /* Títulos más pequeños */
+    h1 { font-size: 1.8rem !important; }
+    h2 { font-size: 1.4rem !important; }
+    h3 { font-size: 1.1rem !important; }
+    
+    /* Inputs y Selectbox más compactos */
+    .stSelectbox div[data-baseweb="select"] > div {
+        font-size: 12px;
+        min-height: 30px;
+    }
+    .stTextInput input, .stNumberInput input, .stDateInput input {
+        font-size: 12px;
+        min-height: 30px;
+        padding: 0.2rem 0.5rem;
+    }
+    
+    /* Reducir márgenes de la app */
+    .block-container {
+        padding-top: 1rem;
+        padding-bottom: 2rem;
+    }
+    
+    /* Métricas compactas */
+    .stMetric { 
+        background-color: #f4f4f4; 
+        padding: 5px 10px; 
+        border-radius: 5px; 
+    }
+    .stMetric label { font-size: 12px !important; }
+    .stMetric div[data-testid="stMetricValue"] { font-size: 18px !important; }
+    
     </style>
     """, unsafe_allow_html=True)
 
-st.title("📊 Cotizador IBM - V19 Cloud App")
-st.markdown("Herramienta de costeo blindada para **UI_CONFIG V19**.")
+st.title("📊 LACostWeb V29")
+st.markdown("Herramienta de costeo **UI_CONFIG V19**.")
 
 # --- FUNCIÓN DE LIMPIEZA DE DATOS (NUEVA) ---
 def clean_decimal(val):
@@ -86,7 +120,7 @@ def calcular_duracion(inicio, fin):
 # BARRA LATERAL (SIDEBAR)
 # ==========================================
 st.sidebar.header("1. Configuración Global")
-id_cot = st.sidebar.text_input("ID Cotización", "COT-2025-V19")
+id_cot = st.sidebar.text_input("ID Cotización", "COT-2025-V29")
 
 # -- PAÍS --
 # Leemos columnas desde la 3ra en adelante para encontrar paises (V19 structure: Scope, Country, Arg...)

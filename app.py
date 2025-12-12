@@ -2,115 +2,80 @@ import streamlit as st
 import pandas as pd
 import os
 
-# --- Configuración de la página ---
 st.set_page_config(page_title="LACOSTWEB V27", layout="wide", page_icon="🏢")
 
-# --- Función para cargar datos ---
 @st.cache_data
 def load_data():
-    # AHORA SI: Nombres cortos confirmados por el diagnóstico
-    file_map = {
-        "input": "input.csv",
-        "countries": "countries.csv",
-        "risk": "risk.csv",        # ¡Asegúrate de subir este!
-        "offering": "offering.csv",
-        "slc": "slc.csv",          # ¡Asegúrate de subir este!
-        "lplat": "lplat.csv",
-        "lband": "lband.csv",
-        "mcbr": "mcbr.csv"
-    }
-
+    # Lista de archivos requeridos (claves internas)
+    required_files = ["input", "countries", "risk", "offering", "slc", "lplat", "lband", "mcbr"]
+    
     loaded_data = {}
     missing_files = []
 
-    for key, filename in file_map.items():
-        # Verificación insensible a mayúsculas/minúsculas para evitar errores tontos
-        if os.path.exists(filename):
-            try:
-                loaded_data[key] = pd.read_csv(filename)
-            except Exception as e:
-                st.error(f"Error leyendo {filename}: {e}")
-        # Intento alternativo (por si se subió como Risk.csv en vez de risk.csv)
-        elif os.path.exists(filename.capitalize()):
-             try:
-                loaded_data[key] = pd.read_csv(filename.capitalize())
-             except Exception as e:
-                st.error(f"Error leyendo {filename}: {e}")
-        else:
-            missing_files.append(filename)
+    # Buscamos variaciones de nombre para cada archivo
+    for key in required_files:
+        # Intentos posibles: "risk.csv", "Risk.csv", "RISK.csv"
+        possible_names = [f"{key}.csv", f"{key.capitalize()}.csv", f"{key.upper()}.csv"]
+        
+        file_found = False
+        for filename in possible_names:
+            if os.path.exists(filename):
+                try:
+                    loaded_data[key] = pd.read_csv(filename)
+                    file_found = True
+                    break # Encontramos uno, dejamos de buscar
+                except Exception as e:
+                    st.error(f"Error leyendo {filename}: {e}")
+        
+        if not file_found:
+            missing_files.append(f"{key}.csv (o variantes)")
     
     return loaded_data, missing_files
 
 def main():
     st.title("🏢 LACOSTWEB V27 - Cotizador Corporativo")
 
-    # Intentamos cargar los datos
     dfs, missing = load_data()
     
-    # --- BLOQUE DE DIAGNÓSTICO ---
     if missing:
-        st.error("❌ AÚN FALTAN ARCHIVOS")
-        st.write("Por favor sube estos archivos a GitHub:")
-        st.code("\n".join(missing))
+        st.error("❌ AÚN NO VEO LOS ARCHIVOS")
+        st.warning("El servidor ve exactamente estos archivos en tu carpeta (copia esto si sigue fallando):")
+        st.code(os.listdir('.')) # Muestra la verdad absoluta del servidor
         st.stop()
     
-    # Si llegamos aquí, ¡todo cargó!
-    st.success("✅ Sistema iniciado. Tablas maestras cargadas.")
+    st.success("✅ ¡Conectado! Todos los archivos cargados.")
     
-    # --- BARRA LATERAL ---
+    # --- RESTO DE LA APP ---
     with st.sidebar:
-        st.header("1. Configuración del Deal")
+        st.header("Configuración")
+        if "countries" in dfs:
+            col = dfs["countries"].columns[0]
+            st.selectbox("País", dfs["countries"][col].unique())
+        moneda = st.radio("Moneda", ["USD", "COP"])
+        trm = st.number_input("TRM", value=4150.0)
+
+    tab1, tab2 = st.tabs(["Cotizador", "Datos"])
+
+    with tab1:
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            if "offering" in dfs: st.selectbox("Offering", dfs["offering"].iloc[:,0].unique())
+            if "lband" in dfs: st.selectbox("Band", dfs["lband"].iloc[:,0].unique())
+        with c2:
+            if "lplat" in dfs: st.selectbox("Platform", dfs["lplat"].iloc[:,0].unique())
+            fte = st.number_input("FTE", 1.0)
+        with c3:
+            costo = st.number_input("Costo Unitario", 0.0)
+            mon_input = st.selectbox("Moneda", ["COP", "USD"])
         
-        # Selector de PAÍS
-        if not dfs["countries"].empty:
-            # Asumimos columna 0 si no hay nombre específico, ajusta si es necesario
-            col_pais = dfs["countries"].columns[0]
-            lista_paises = dfs["countries"][col_pais].unique()
-            pais_selec = st.selectbox("Seleccionar País", lista_paises)
-        
-        moneda = st.radio("Moneda de Salida", ["USD", "COP"])
-        trm = st.number_input("TRM / Tasa de Cambio", value=4150.0)
+        st.divider()
+        val_final = costo * trm if mon_input=="USD" and moneda=="COP" else costo
+        if mon_input=="COP" and moneda=="USD": val_final = costo / trm
+        st.metric(f"Total {moneda}", f"{val_final * fte:,.2f}")
 
-    # --- PESTAÑAS ---
-    tab_cotizador, tab_datos = st.tabs(["🧮 Cotizador", "📂 Tablas Maestras"])
-
-    with tab_cotizador:
-        st.subheader("2. Definición del Servicio")
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            col_off = dfs["offering"].columns[0]
-            lista_offerings = dfs["offering"][col_off].unique()
-            offering_selec = st.selectbox("Offering / Servicio", lista_offerings)
-
-            col_band = dfs["lband"].columns[0]
-            lista_bands = dfs["lband"][col_band].unique()
-            band_selec = st.selectbox("Band / Nivel", lista_bands)
-
-        with col2:
-            col_plat = dfs["lplat"].columns[0]
-            lista_plat = dfs["lplat"][col_plat].unique()
-            plat_selec = st.selectbox("Plataforma", lista_plat)
-            fte_cantidad = st.number_input("Cantidad FTE", value=1.0)
-
-        with col3:
-            costo_unitario = st.number_input("Costo Unitario (Input)", value=0.0)
-            moneda_input = st.selectbox("Moneda Costo", ["COP", "USD"])
-
-        st.markdown("---")
-        
-        # Cálculo simple
-        costo_final = costo_unitario * trm if (moneda_input=="USD" and moneda=="COP") else costo_unitario
-        if moneda_input=="COP" and moneda=="USD": costo_final = costo_unitario / trm
-        
-        total = costo_final * fte_cantidad
-
-        c1, c2 = st.columns(2)
-        c1.metric(f"Total ({moneda})", f"{total:,.2f}")
-
-    with tab_datos:
-        opcion = st.selectbox("Ver tabla", list(dfs.keys()))
-        st.dataframe(dfs[opcion], use_container_width=True)
+    with tab2:
+        sel = st.selectbox("Ver tabla", list(dfs.keys()))
+        st.dataframe(dfs[sel], use_container_width=True)
 
 if __name__ == "__main__":
     main()

@@ -14,7 +14,7 @@ def load_data_v18():
     """
     # Mapa de: Clave Interna -> Palabra a buscar en el nombre del archivo
     keywords = {
-        "config":    "UI_CONFIG",
+        "config":    "ui_config",
         "countries": "countries",
         "risk":      "risk",
         "offering":  "offering",

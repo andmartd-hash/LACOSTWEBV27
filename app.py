@@ -183,6 +183,9 @@ offer_sel = o1.selectbox("Offering", offer_list)
 row_off = df_offering[df_offering['Offering'] == offer_sel].iloc[0]
 o2.text_input("Info", f"L40: {row_off.get('L40','-')} | Conga: {row_off.get('Load in conga','-')}", disabled=True)
 
+# (NUEVO) Campo de Descripción del Servicio
+st.text_input("Service Description", placeholder="Descripción del servicio...")
+
 # Fila 2: Cantidades y Factores
 c1, c2, c3, c4, _ = st.columns([1, 2, 1, 1, 2])
 qty = c1.number_input("QTY", min_value=1, value=1)

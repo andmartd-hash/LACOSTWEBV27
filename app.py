@@ -172,11 +172,11 @@ with st.expander("📝 Datos Cliente", expanded=True):
     c1, c2, c3 = st.columns(3)
     c1.text_input("Nombre Cliente")
     c2.text_input("Número Cliente")
-    d1, d2 = st.columns(2)
+    d1, d2, d3 = st.columns([2, 2, 1])
     f_ini = d1.date_input("Inicio Contrato", date.today())
     f_fin = d2.date_input("Fin Contrato", date.today().replace(year=date.today().year + 1))
     dur_contrato = calcular_duracion(f_ini, f_fin)
-    st.caption(f"Duración calculada: {dur_contrato} meses")
+    d3.metric("Duración Contrato", f"{dur_contrato} Meses")
 
 # --- 1. OFFERING ---
 st.markdown("---")
@@ -206,11 +206,12 @@ except:
     pass
 c_uplf.metric("Factor UPLF", uplf)
 
-# Fechas Servicio
-d_s1, d_s2 = st.columns(2)
+# Fechas Servicio (AGREGADO DURACIÓN VISIBLE)
+d_s1, d_s2, d_s3 = st.columns([2, 2, 1])
 fs_ini = d_s1.date_input("Inicio Servicio", f_ini)
 fs_fin = d_s2.date_input("Fin Servicio", f_fin)
 dur_serv = calcular_duracion(fs_ini, fs_fin)
+d_s3.metric("Duración (Meses)", dur_serv)
 
 # Costos Unitarios
 u1, u2 = st.columns(2)
@@ -273,12 +274,13 @@ if item_maq:
 
 st.write(f"Costo Mensual Base: **USD {precio_mes:,.2f}**")
 
-# Manage Inputs
-m1, m2, m3 = st.columns(3)
+# Manage Inputs (AGREGADO DURACIÓN VISIBLE)
+m1, m2, m3, m4 = st.columns([1, 1, 1, 1])
 horas = m1.number_input("Horas", min_value=0.0)
 fm_ini = m2.date_input("Inicio Manage", f_ini)
 fm_fin = m3.date_input("Fin Manage", f_fin)
 dur_man = calcular_duracion(fm_ini, fm_fin)
+m4.metric("Duración (Meses)", dur_man)
 
 total_man_usd = precio_mes * horas * dur_man
 if moneda_tipo == "Local":

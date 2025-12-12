@@ -2,145 +2,163 @@ import streamlit as st
 import pandas as pd
 import os
 
-st.set_page_config(page_title="LACOSTWEB V16", layout="wide", page_icon="💰")
+# --- Configuración Visual ---
+st.set_page_config(page_title="LACOSTWEB V12", layout="wide", page_icon="📋")
 
-# --- 1. CARGA INTELIGENTE DE ARCHIVOS ---
-def find_file(keyword, file_list):
-    for f in file_list:
-        if keyword.lower() in f.lower() and f.endswith(".csv"):
-            return f
-    return None
+# --- 1. CONFIGURACIÓN EXACTA DE ARCHIVOS V12 ---
+# Usamos los nombres TAL CUAL los subiste (incluyendo el error de tipeo CONGIF)
+FILES = {
+    "config":    "V12-BASE.xlsx - UI_CONGIF.csv", # <--- OJO: Lee CONGIF
+    "countries": "V12-BASE.xlsx - countries.csv",
+    "risk":      "V12-BASE.xlsx - Risk.csv",
+    "offering":  "V12-BASE.xlsx - Offering.csv",
+    "slc":       "V12-BASE.xlsx - SLC.csv",
+    "lplat":     "V12-BASE.xlsx - Lplat.csv",
+    "lband":     "V12-BASE.xlsx - Lband.csv",
+    "mcbr":      "V12-BASE.xlsx - MCBR.csv"
+}
 
 @st.cache_data
 def load_data():
-    all_files = os.listdir('.')
-    keywords = {
-        "config": "ui_config", "countries": "countries", "risk": "risk",
-        "offering": "offering", "slc": "slc", "lplat": "lplat",
-        "lband": "lband", "mcbr": "mcbr"
-    }
     data = {}
     missing = []
-    
-    for key, search in keywords.items():
-        fname = find_file(search, all_files)
-        if fname:
+
+    for key, filename in FILES.items():
+        if os.path.exists(filename):
             try:
-                df = pd.read_csv(fname)
-                df.columns = df.columns.str.strip()
-                df = df.dropna(how='all')
+                # Leemos el CSV
+                df = pd.read_csv(filename)
+                df.columns = df.columns.str.strip() # Limpiar cabeceras
+                df = df.dropna(how='all') # Limpiar vacíos
                 data[key] = df
-            except: missing.append(search)
+            except Exception as e:
+                st.error(f"Error leyendo {filename}: {e}")
         else:
-            missing.append(search)
+            missing.append(filename)
     return data, missing
 
 def main():
-    st.title("💰 LACOSTWEB V16 - Cotizador Financiero")
+    st.title("📋 LACOSTWEB V12 - Configuración Detallada")
 
+    # Cargar datos
     dfs, missing = load_data()
+
     if missing:
-        st.error(f"Faltan archivos: {missing}")
+        st.error("❌ FALTAN ARCHIVOS EN EL SERVIDOR")
+        st.code("\n".join(missing))
         st.stop()
-    
+
     if "config" not in dfs:
-        st.error("Falta UI_CONFIG")
+        st.error("❌ Falta el archivo de configuración UI_CONGIF.csv")
         st.stop()
 
-    # --- BARRA LATERAL (Variables Globales) ---
-    with st.sidebar:
-        st.header("Parámetros Financieros")
-        trm = st.number_input("TRM (Tasa de Cambio)", value=4200.0, step=10.0)
-        margen_target = st.slider("Margen Objetivo (%)", 0, 50, 20) / 100
-
-    # --- 2. GENERACIÓN DEL FORMULARIO ---
+    # --- 2. MOTOR DE INTERFAZ BASADO EN TUS 4 PUNTOS ---
     df_config = dfs["config"]
-    col_label = df_config.columns[0]
-    col_source = df_config.columns[1] if len(df_config.columns) > 1 else None
+    
+    # Asumimos que el CSV tiene las columnas en este orden (0, 1, 2, 3)
+    # Col 0: NOMBRE DEL CAMPO (Label)
+    # Col 1: FUENTE DE DATOS (Source)
+    # Col 2: LÓGICA / INSTRUCCIÓN (Help Text)
+    # Col 3: EJEMPLO (Placeholder / Default)
+    
+    # Obtener nombres de columnas por índice para no fallar por nombres
+    cols = df_config.columns
+    c_nombre  = cols[0]
+    c_fuente  = cols[1] if len(cols) > 1 else None
+    c_logica  = cols[2] if len(cols) > 2 else None
+    c_ejemplo = cols[3] if len(cols) > 3 else None
 
-    user_inputs = {}
+    # Diccionario para guardar lo que el usuario llena
+    inputs = {}
 
-    with st.form("cotizador"):
-        st.subheader("Configuración del Deal")
-        c1, c2 = st.columns(2)
+    with st.form("form_v12"):
+        st.subheader("Parametrización del Escenario")
+        
+        # Grid de 2 columnas
+        col_izq, col_der = st.columns(2)
 
         for idx, row in df_config.iterrows():
-            if pd.isna(row[col_label]): continue
-            label = str(row[col_label]).strip()
+            if pd.isna(row[c_nombre]): continue
             
-            # Detectamos si es lista
-            source_data = None
-            if col_source and pd.notna(row[col_source]):
-                src_name = str(row[col_source]).strip().lower()
-                if src_name in dfs: source_data = dfs[src_name]
-                elif src_name.lower() in dfs: source_data = dfs[src_name.lower()]
+            # 1. NOMBRE DEL CAMPO
+            label = str(row[c_nombre]).strip()
+            
+            # 2. DONDE SE TRAEN LOS DATOS
+            fuente = str(row[c_fuente]).strip() if c_fuente and pd.notna(row[c_fuente]) else ""
+            
+            # 3. LO QUE DEBE HACER (Se mostrará como ayuda/tooltip)
+            logica = str(row[c_logica]).strip() if c_logica and pd.notna(row[c_logica]) else ""
+            
+            # 4. EJEMPLO (Valor por defecto)
+            ejemplo = str(row[c_ejemplo]).strip() if c_ejemplo and pd.notna(row[c_ejemplo]) else ""
 
-            # ID único
-            uid = f"in_{idx}"
-            target_col = c1 if idx % 2 == 0 else c2
+            # --- Lógica de Renderizado ---
+            uid = f"field_{idx}"
+            destino = col_izq if idx % 2 == 0 else col_der
             
-            with target_col:
-                if source_data is not None:
-                    # LISTA
-                    opts = source_data.iloc[:, 0].unique()
-                    user_inputs[label] = st.selectbox(label, opts, key=uid)
+            with destino:
+                # ¿Tiene fuente de datos vinculada?
+                tabla_datos = None
+                
+                # Intentamos buscar la tabla en los archivos cargados
+                if fuente.lower() in [k.lower() for k in dfs.keys()]:
+                    # Buscamos la llave exacta
+                    for k in dfs.keys():
+                        if k.lower() == fuente.lower():
+                            tabla_datos = dfs[k]
+                            break
+                
+                if tabla_datos is not None:
+                    # ES UNA LISTA DESPLEGABLE
+                    opciones = tabla_datos.iloc[:, 0].unique()
+                    # Mostramos la lógica en el 'help' para que sepas qué hace
+                    inputs[label] = st.selectbox(label, options=opciones, key=uid, help=f"Lógica: {logica}")
                 else:
-                    # TEXTO / NUMERO
-                    # Intentamos detectar si el label sugiere que es un numero
-                    label_lower = label.lower()
-                    if any(x in label_lower for x in ['fte', 'cost', 'precio', 'cantidad', 'qty', 'num']):
-                         user_inputs[label] = st.number_input(label, value=0.0, step=1.0, key=uid)
-                    else:
-                        user_inputs[label] = st.text_input(label, key=uid)
+                    # ES UN CAMPO MANUAL (Usamos el EJEMPLO como valor sugerido)
+                    # Si el ejemplo parece número, usamos number_input
+                    try:
+                        val_defecto = float(ejemplo)
+                        inputs[label] = st.number_input(label, value=val_defecto, key=uid, help=f"Lógica: {logica}")
+                    except:
+                        inputs[label] = st.text_input(label, value=ejemplo, key=uid, help=f"Lógica: {logica}")
 
         st.markdown("---")
-        submitted = st.form_submit_button("✅ Calcular Resultados", type="primary")
+        submitted = st.form_submit_button("✅ Calcular Escenario", type="primary")
 
-    # --- 3. LÓGICA DE OPERACIÓN (LO QUE PEDISTE) ---
+    # --- 3. LÓGICA DE OPERACIÓN FINAL ---
     if submitted:
-        st.divider()
-        st.subheader("📊 Resultados de la Operación")
-
-        # Intentamos extraer las variables CLAVE del formulario dinámico
-        # Buscamos en lo que el usuario llenó
+        st.success("Datos capturados según tu configuración:")
         
-        fte = 0.0
-        costo_unit = 0.0
-        moneda = "COP" # Default
-
-        # Búsqueda inteligente de variables
-        for key, val in user_inputs.items():
-            k = key.lower()
-            if "fte" in k or "cantidad" in k:
-                try: fte = float(val)
-                except: pass
-            if "cost" in k or "precio" in k:
-                try: costo_unit = float(val)
-                except: pass
-            if "moneda" in k or "curr" in k:
-                moneda = str(val)
-
-        # CÁLCULOS
-        costo_total_base = fte * costo_unit
+        # Mostrar las variables capturadas
+        st.json(inputs)
         
-        # Conversión de moneda (Asumiendo salida en COP)
-        # Si el input es USD y queremos COP
-        costo_total_cop = costo_total_base
-        if "USD" in moneda.upper():
-            costo_total_cop = costo_total_base * trm
+        # AQUÍ APLICAMOS LA LÓGICA GENÉRICA DE COTIZACIÓN
+        # Intentamos detectar las variables clave basándonos en nombres comunes
+        # (Aunque el usuario defina los nombres, buscamos patrones)
         
-        # Precio de Venta sugerido
-        precio_venta = costo_total_cop / (1 - margen_target) if margen_target < 1 else 0
-        profit = precio_venta - costo_total_cop
-
-        # VISUALIZACIÓN
-        colA, colB, colC = st.columns(3)
-        colA.metric("Costo Total (COP)", f"${costo_total_cop:,.0f}")
-        colB.metric("Precio Venta Sugerido", f"${precio_venta:,.0f}")
-        colC.metric("Margen Estimado", f"{profit:,.0f}", delta=f"{margen_target*100}%")
-        
-        with st.expander("Ver detalle de variables capturadas"):
-            st.json(user_inputs)
+        try:
+            # Buscamos valores numéricos en los inputs
+            valores = {k: float(v) for k, v in inputs.items() if isinstance(v, (int, float))}
+            
+            # Buscamos palabras clave
+            trm = next((v for k, v in valores.items() if "trm" in k.lower() or "tasa" in k.lower()), 0)
+            fte = next((v for k, v in valores.items() if "fte" in k.lower() or "cant" in k.lower()), 1)
+            costo = next((v for k, v in valores.items() if "cost" in k.lower() or "precio" in k.lower()), 0)
+            
+            # Si encontramos al menos Costo, hacemos una proyección básica
+            if costo > 0:
+                st.divider()
+                st.subheader("🧮 Cálculo Automático")
+                
+                total = costo * fte
+                if trm > 0 and total < 100000: # Asumimos que si es pequeño está en USD
+                    total_cop = total * trm
+                    st.metric("Total Estimado (COP)", f"${total_cop:,.2f}", delta="Proyectado con TRM")
+                else:
+                    st.metric("Total Estimado", f"{total:,.2f}")
+                    
+        except Exception as e:
+            st.warning("No se pudo realizar el cálculo automático. Revisa que los campos numéricos estén correctos.")
 
 if __name__ == "__main__":
     main()

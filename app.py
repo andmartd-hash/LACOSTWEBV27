@@ -245,15 +245,23 @@ except: items_disp = []
 
 item_maq = rad2.selectbox("Item", items_disp)
 
-precio_mes = 0.0
+precio_mes_raw = 0.0
 if item_maq:
     try:
         fila = df_active[df_active.iloc[:, col_item_idx] == item_maq]
         if not fila.empty and pais in fila.columns:
-            precio_mes = clean_decimal(fila[pais].values[0])
+            precio_mes_raw = clean_decimal(fila[pais].values[0])
     except: pass
 
-st.write(f"Costo Mensual Base: **USD {precio_mes:,.2f}**")
+# --- CORRECCIÓN DE LÓGICA DE MONEDA (Monthly Cost) ---
+# Lógica: "si Currency=USD dividir el costo entre ER, si no multiplicar el costo *1"
+# Interpretación: El dato viene en Local. Si seleccionamos USD, dividimos.
+if moneda_tipo == "USD" and tasa_er > 0:
+    precio_mes_final = precio_mes_raw / tasa_er
+else:
+    precio_mes_final = precio_mes_raw
+
+st.write(f"Costo Mensual Base: **{simbolo} {precio_mes_final:,.2f}**")
 
 # Manage Inputs
 m1, m2, m3, m4, _ = st.columns([1, 1, 1, 1, 2])
@@ -263,8 +271,9 @@ fm_fin = m3.date_input("Fin Manage", f_fin)
 dur_man = calcular_duracion(fm_ini, fm_fin)
 m4.metric("Meses", dur_man)
 
-total_man_usd = precio_mes * horas * dur_man
-total_man_final = total_man_usd * tasa_er if moneda_tipo == "Local" else total_man_usd
+# CÁLCULO MANAGE (Usando el precio ya ajustado)
+# Total = Precio Ajustado * Horas * Duración
+total_man_final = precio_mes_final * horas * dur_man
 
 st.info(f"Total Manage: {simbolo} {total_man_final:,.2f}")
 

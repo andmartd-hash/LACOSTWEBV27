@@ -142,16 +142,29 @@ if moneda_tipo == "Local":
 else:
     st.sidebar.success("Base: USD")
 
-# 5. Riesgo
+# 5. Riesgo (CORREGIDO MANUALMENTE)
 riesgos_disp = df_risk['Risk'].unique()
 riesgo_sel = st.sidebar.selectbox("Nivel Riesgo", riesgos_disp)
-contingencia = 0.0
-try:
-    row_risk = df_risk[df_risk['Risk'] == riesgo_sel]
-    if not row_risk.empty:
-        contingencia = clean_decimal(row_risk['Contingency'].values[0])
-except:
-    pass
+
+# Mapeo manual para asegurar los valores 2%, 5%, 8%
+mapa_riesgo = {
+    "Low": 0.02,
+    "Medium": 0.05,
+    "High": 0.08
+}
+
+if riesgo_sel in mapa_riesgo:
+    contingencia = mapa_riesgo[riesgo_sel]
+else:
+    # Fallback por si el nombre es diferente (ej: Bajo, Alto)
+    contingencia = 0.0
+    try:
+        row_risk = df_risk[df_risk['Risk'] == riesgo_sel]
+        if not row_risk.empty:
+            contingencia = clean_decimal(row_risk['Contingency'].values[0])
+    except:
+        pass
+
 st.sidebar.write(f"Contingencia: **{contingencia*100:.1f}%**")
 
 
@@ -207,6 +220,15 @@ st.markdown("---")
 # --- 2. MACHINE / MANAGE ---
 st.subheader("💻 2. Machine & Manage Cost")
 
+# 1. (NUEVO) OFFERING PARA MACHINE
+m_off1, m_off2, _ = st.columns([3, 1, 2])
+# Usamos offer_list que ya cargamos arriba, pero con key única para no chocar
+offer_man_sel = m_off1.selectbox("Offering (Manage)", offer_list, key="offer_man")
+# Info extra
+row_off_man = df_offering[df_offering['Offering'] == offer_man_sel].iloc[0]
+m_off2.text_input("Info (Manage)", f"L40: {row_off_man.get('L40','-')} | Conga: {row_off_man.get('Load in conga','-')}", disabled=True)
+
+# 2. SELECCIÓN DE CATEGORÍA Y MÁQUINA
 rad1, rad2, _ = st.columns([1, 2, 1])
 tipo_fuente = rad1.radio("Fuente Datos", ["Machine Category", "Brand Rate Full"])
 

@@ -2,153 +2,140 @@ import streamlit as st
 import pandas as pd
 import os
 
-# --- Configuración Visual ---
-st.set_page_config(page_title="LACOSTWEB FINAL", layout="wide", page_icon="✅")
+st.set_page_config(page_title="Cotizador V16 - Interfaz Limpia", layout="wide", page_icon="✨")
 
-# --- 1. CONFIGURACIÓN DE NOMBRES (LIMPIOS) ---
-FILES = {
-    "config":    "UI_CONFIG.csv",   # El único en MAYÚSCULAS
-    "countries": "countries.csv",   # Todo el resto en minúsculas
-    "risk":      "risk.csv",
-    "offering":  "offering.csv",
-    "slc":       "slc.csv",
-    "lplat":     "lplat.csv",
-    "lband":     "lband.csv",
-    "mcbr":      "mcbr.csv"
-}
-
+# --- 1. CARGADOR INTELIGENTE (Detecta tus archivos V16) ---
 @st.cache_data
 def load_data():
-    data = {}
-    missing = []
+    # Palabras clave para identificar cada tabla, sin importar el prefijo "V16-BASE..."
+    mapa_archivos = {
+        "config":    "UI_CONFIG",
+        "countries": "countries",
+        "risk":      "risk",
+        "offering":  "offering",
+        "slc":       "slc",
+        "lplat":     "lplat",
+        "lband":     "lband",
+        "mcbr":      "mcbr"
+    }
+    
+    # 1. Obtenemos todos los archivos reales en la carpeta
+    archivos_en_disco = [f for f in os.listdir('.') if f.endswith('.csv')]
+    
+    datos_cargados = {}
+    faltantes = []
 
-    for key, filename in FILES.items():
-        if os.path.exists(filename):
+    for clave_interna, palabra_clave in mapa_archivos.items():
+        # Buscamos un archivo que contenga la palabra clave (ignora mayúsculas)
+        archivo_encontrado = None
+        for f in archivos_en_disco:
+            if palabra_clave.lower() in f.lower():
+                archivo_encontrado = f
+                break
+        
+        if archivo_encontrado:
             try:
-                df = pd.read_csv(filename)
-                df.columns = df.columns.str.strip() # Limpiar espacios en cabeceras
-                df = df.dropna(how='all') # Eliminar filas vacías
-                data[key] = df
+                df = pd.read_csv(archivo_encontrado)
+                df.columns = df.columns.str.strip() # Limpieza de cabeceras
+                df = df.dropna(how='all') # Limpieza de filas vacías
+                datos_cargados[clave_interna] = df
             except Exception as e:
-                st.error(f"Error leyendo {filename}: {e}")
-        # Soporte para fallback por si subiste 'UI_CONGIF' con error de dedo
-        elif key == "config" and os.path.exists("UI_CONGIF.csv"):
-             data[key] = pd.read_csv("UI_CONGIF.csv")
+                st.error(f"Error leyendo {archivo_encontrado}: {e}")
         else:
-            missing.append(filename)
+            faltantes.append(palabra_clave)
             
-    return data, missing
+    return datos_cargados, faltantes
 
 def main():
-    st.title("✅ LACOSTWEB - Cotizador Corporativo")
+    st.title("✨ Cotizador V16 - Interfaz Dinámica")
 
-    # Cargar datos
+    # Cargar tablas
     dfs, missing = load_data()
 
+    # Validación de seguridad
     if missing:
-        st.error("❌ FALTAN ARCHIVOS EN GITHUB")
-        st.warning("Por favor renombra tus archivos para que coincidan con esta lista:")
-        st.code("\n".join(missing))
-        st.stop()
-
+        st.warning(f"⚠️ Atención: No encuentro archivos con estas palabras clave: {', '.join(missing)}")
+        st.info("Asegúrate de haber subido los archivos CSV a GitHub.")
+    
     if "config" not in dfs:
-        st.error("❌ Falta el archivo UI_CONFIG.csv")
+        st.error("❌ ERROR CRÍTICO: No se encontró el archivo de configuración (UI_CONFIG).")
         st.stop()
 
-    # --- 2. MOTOR DE UI (4 COLUMNAS) ---
+    # --- 2. CONSTRUCCIÓN DE LA INTERFAZ ---
     df_config = dfs["config"]
     
-    # Mapeo de columnas según tu instrucción:
-    # 1. Nombre del campo (App Label)
-    # 2. Fuente de datos (Source Table)
-    # 3. Qué hace el campo (Logic/Help)
-    # 4. Ejemplo (Default Value)
-    
-    cols = df_config.columns
-    c_nombre  = cols[0]
-    c_fuente  = cols[1] if len(cols) > 1 else None
-    c_logica  = cols[2] if len(cols) > 2 else None
-    c_ejemplo = cols[3] if len(cols) > 3 else None
+    # Mapeo de columnas por posición (0, 1, 2, 3) para ser exactos con tu Excel
+    try:
+        col_nombre   = df_config.columns[0] # Campo 1: Nombre en la app
+        col_fuente   = df_config.columns[1] # Campo 2: De dónde trae datos
+        col_logica   = df_config.columns[2] # Campo 3: Qué debe hacer (Ayuda)
+        col_ejemplo  = df_config.columns[3] # Campo 4: Ejemplo (Valor defecto)
+    except IndexError:
+        st.error("❌ Tu archivo UI_CONFIG debe tener al menos 4 columnas.")
+        st.dataframe(df_config.head())
+        st.stop()
 
-    inputs = {}
+    respuestas_usuario = {}
 
-    with st.form("form_final"):
-        st.subheader("Configuración del Escenario")
+    with st.form("form_interfaz_v16"):
+        st.subheader("Parámetros de Entrada")
+        st.info("Los campos marcados con ℹ️ tienen instrucciones de lógica.")
         
         c1, c2 = st.columns(2)
 
         for idx, row in df_config.iterrows():
-            if pd.isna(row[c_nombre]): continue
+            # Si no hay nombre de campo, saltamos la fila
+            if pd.isna(row[col_nombre]): continue
             
-            # --- Lectura de la Fila de Configuración ---
-            label = str(row[c_nombre]).strip()
-            fuente = str(row[c_fuente]).strip().lower() if c_fuente and pd.notna(row[c_fuente]) else ""
-            logica = str(row[c_logica]).strip() if c_logica and pd.notna(row[c_logica]) else ""
-            ejemplo = str(row[c_ejemplo]).strip() if c_ejemplo and pd.notna(row[c_ejemplo]) else ""
+            # Extraer datos de la configuración
+            label = str(row[col_nombre]).strip()
+            fuente = str(row[col_fuente]).strip().lower() if pd.notna(row[col_fuente]) else ""
+            logica = str(row[col_logica]).strip() if pd.notna(row[col_logica]) else ""
+            ejemplo = str(row[col_ejemplo]).strip() if pd.notna(row[col_ejemplo]) else ""
 
-            # --- Identificar Fuente de Datos ---
-            tabla_datos = None
-            if fuente:
-                # Buscar coincidencia exacta o parcial en las tablas cargadas
-                if fuente in dfs: 
-                    tabla_datos = dfs[fuente]
-                elif fuente.lower() in dfs:
-                    tabla_datos = dfs[fuente.lower()]
+            # Determinar dónde pintar (Izquierda o Derecha)
+            target_col = c1 if idx % 2 == 0 else c2
+            id_unico = f"input_{idx}"
 
-            # --- Renderizado del Widget ---
-            uid = f"f_{idx}" # ID único
-            col_destino = c1 if idx % 2 == 0 else c2
-
-            with col_destino:
+            with target_col:
+                # LÓGICA DE DECISIÓN: ¿Lista o Texto?
+                
+                tabla_datos = None
+                # Buscamos si la "Fuente" coincide con alguna tabla cargada
+                if fuente:
+                    # Búsqueda exacta o parcial en las llaves de dfs
+                    for k in dfs.keys():
+                        if fuente in k or k in fuente:
+                            tabla_datos = dfs[k]
+                            break
+                
                 if tabla_datos is not None:
-                    # CASO 1: LISTA DESPLEGABLE (Si tiene fuente)
+                    # --- ES UNA LISTA DESPLEGABLE ---
                     opciones = tabla_datos.iloc[:, 0].unique()
-                    inputs[label] = st.selectbox(
+                    respuestas_usuario[label] = st.selectbox(
                         label, 
-                        options=opciones, 
-                        key=uid,
-                        help=f"ℹ️ {logica}" # Mostramos la lógica como ayuda
+                        opciones, 
+                        key=id_unico,
+                        help=f"Instrucción: {logica}" # Aquí va tu columna 3
                     )
                 else:
-                    # CASO 2: CAMPO MANUAL (Texto o Número)
-                    # Usamos el 'Ejemplo' para decidir si pintar número o texto
-                    es_numero = False
-                    val_defecto = 0.0
-                    
-                    # Intentamos ver si el ejemplo es un número
-                    if ejemplo:
-                        try:
-                            val_defecto = float(ejemplo)
-                            es_numero = True
-                        except:
-                            pass
-                    
-                    if es_numero:
-                        inputs[label] = st.number_input(
-                            label, 
-                            value=val_defecto, 
-                            key=uid, 
-                            help=f"ℹ️ {logica}"
-                        )
-                    else:
-                        inputs[label] = st.text_input(
-                            label, 
-                            value=ejemplo, 
-                            key=uid, 
-                            help=f"ℹ️ {logica}"
-                        )
+                    # --- ES UN CAMPO DE TEXTO/NUMERO ---
+                    # Usamos la columna 4 (Ejemplo) como valor sugerido
+                    respuestas_usuario[label] = st.text_input(
+                        label, 
+                        value=ejemplo, 
+                        key=id_unico,
+                        help=f"Instrucción: {logica}" # Aquí va tu columna 3
+                    )
 
         st.markdown("---")
-        submitted = st.form_submit_button("✅ Calcular", type="primary")
+        submitted = st.form_submit_button("✅ Procesar Datos", type="primary")
 
-    # --- 3. PROCESAMIENTO ---
+    # --- 3. RESULTADOS (PRUEBA DE QUE FUNCIONA) ---
     if submitted:
-        st.success("Información capturada con éxito.")
-        st.write("Variables para cálculo:")
-        st.json(inputs)
-        
-        # Nota: Aquí podemos agregar la matemática específica si me compartes
-        # la fórmula exacta que quieres aplicar con estos campos.
+        st.success("Interfaz generada y datos capturados correctamente.")
+        st.write("Estos son los valores que ingresaste (listos para cálculo):")
+        st.json(respuestas_usuario)
 
 if __name__ == "__main__":
     main()

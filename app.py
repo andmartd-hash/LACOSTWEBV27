@@ -2,13 +2,14 @@ import streamlit as st
 import pandas as pd
 import os
 
-st.set_page_config(page_title="LACOSTWEB V14", layout="wide", page_icon="🏗️")
+# --- Configuración Inicial ---
+st.set_page_config(page_title="LACOSTWEB V14", layout="wide", page_icon="🛠️")
 
-# --- 1. MAPEO DE NOMBRES CORTOS ---
-# El código buscará estos archivos EXACTOS en tu repositorio.
-FILE_MAP = {
-    "ui_config": "UI_CONFIG.csv",   # ESTE EN MAYÚSCULA
-    "countries": "countries.csv",   # El resto en minúscula
+# --- 1. DEFINICIÓN DE ARCHIVOS (Tal cual lo pediste) ---
+# El código buscará estos nombres EXACTOS en tu carpeta de GitHub.
+FILES = {
+    "config":    "UI_CONFIG.csv",  # El único en mayúsculas
+    "countries": "countries.csv",  # Todo el resto en minúsculas
     "risk":      "risk.csv",
     "offering":  "offering.csv",
     "slc":       "slc.csv",
@@ -19,94 +20,103 @@ FILE_MAP = {
 
 @st.cache_data
 def load_data():
-    loaded_data = {}
-    missing_files = []
+    data = {}
+    missing = []
 
-    for key, filename in FILE_MAP.items():
+    for key, filename in FILES.items():
         if os.path.exists(filename):
             try:
-                # Leemos el CSV
+                # Leemos el archivo
                 df = pd.read_csv(filename)
-                # Limpiamos espacios en blanco en columnas
+                # Limpiamos nombres de columnas (quita espacios invisibles)
                 df.columns = df.columns.str.strip()
-                # Eliminamos filas vacías
+                # Eliminamos filas vacías que a veces quedan en Excel
                 df = df.dropna(how='all')
-                loaded_data[key] = df
+                data[key] = df
             except Exception as e:
                 st.error(f"Error leyendo {filename}: {e}")
         else:
-            missing_files.append(filename)
-    
-    return loaded_data, missing_files
+            missing.append(filename)
+            
+    return data, missing
 
 def main():
-    st.title("🏗️ LACOSTWEB V14")
+    st.title("🛠️ LACOSTWEB V14")
 
-    # Cargar datos
+    # Carga de tablas
     dfs, missing = load_data()
-    
-    # Validación
+
+    # Si faltan archivos, avisamos y paramos.
     if missing:
-        st.error("❌ NO ENCUENTRO LOS ARCHIVOS:")
+        st.error("❌ FALTAN ARCHIVOS EN GITHUB")
+        st.warning("Por favor, asegúrate de que tus archivos en GitHub tengan ESTOS nombres exactos:")
         st.code("\n".join(missing))
-        st.warning("⚠️ IMPORTANTE: Debes renombrar tus archivos en GitHub para que coincidan con esta lista (minúsculas).")
-        st.write("Archivos que SÍ veo actualmente en la carpeta:", os.listdir('.'))
         st.stop()
 
-    if "ui_config" not in dfs:
-        st.error("❌ Error: No se pudo leer UI_CONFIG.csv")
+    if "config" not in dfs:
+        st.error("❌ Falta el archivo UI_CONFIG.csv")
         st.stop()
 
-    # --- 2. MOTOR DINÁMICO ---
-    df_config = dfs["ui_config"]
+    # --- 2. GENERACIÓN DE CAMPOS (MOTOR DE LA TOOL) ---
+    # Usamos UI_CONFIG para saber qué campos pintar.
+    df_config = dfs["config"]
     
-    # Asumimos estructura: Col 0 = Label, Col 1 = Source
-    cols_config = df_config.columns
-    col_label_name = cols_config[0]
-    col_source_name = cols_config[1] if len(cols_config) > 1 else None
+    # Asumimos:
+    # Columna 0 = Nombre del Campo (Label)
+    # Columna 1 = Tabla Fuente (Source) - opcional
+    cols = df_config.columns
+    col_label = cols[0]
+    col_source = cols[1] if len(cols) > 1 else None
 
-    user_inputs = {}
+    # Diccionario para guardar lo que el usuario escriba/seleccione
+    inputs_usuario = {}
 
-    with st.form("main_form"):
-        st.subheader("Datos del Proyecto")
+    with st.form("cotizador_form"):
+        st.subheader("Configuración del Escenario")
         
+        # Grid de 2 columnas para que se vea ordenado
         c1, c2 = st.columns(2)
 
         for idx, row in df_config.iterrows():
-            raw_label = row[col_label_name]
-            if pd.isna(raw_label): continue
-            label = str(raw_label).strip()
+            # Validación básica para no procesar filas vacías
+            if pd.isna(row[col_label]): continue
             
-            unique_key = f"in_{idx}_{label}"
+            label_campo = str(row[col_label]).strip()
             
-            # Buscar fuente de datos
-            source_table = None
-            if col_source_name and pd.notna(row[col_source_name]):
-                source_key = str(row[col_source_name]).strip().lower() # Convertimos a minúscula para buscar
-                
-                # Buscamos en el diccionario de datos cargados
-                if source_key in dfs: # Búsqueda directa (ej: 'risk')
-                    source_table = dfs[source_key]
-                elif source_key.lower() in dfs: # Búsqueda de seguridad
-                    source_table = dfs[source_key.lower()]
+            # Buscamos si este campo debe ser una lista desplegable
+            tabla_fuente = None
+            
+            # LÓGICA:
+            # 1. Miramos si la columna 'Fuente' del excel dice algo (ej: "Risk")
+            # 2. Convertimos eso a minúscula ("risk") y buscamos si tenemos ese archivo cargado.
+            if col_source and pd.notna(row[col_source]):
+                nombre_fuente = str(row[col_source]).strip().lower()
+                if nombre_fuente in dfs:
+                    tabla_fuente = dfs[nombre_fuente]
+            
+            # Renderizamos el campo en la columna 1 o 2 (intercalado)
+            col_destino = c1 if idx % 2 == 0 else c2
+            key_unica = f"field_{idx}" # ID interno para Streamlit
 
-            # Renderizar
-            target_col = c1 if idx % 2 == 0 else c2
-            with target_col:
-                if source_table is not None:
-                    # SELECTBOX
-                    options = source_table.iloc[:, 0].unique()
-                    user_inputs[label] = st.selectbox(label, options, key=unique_key)
+            with col_destino:
+                if tabla_fuente is not None:
+                    # ES LISTA (DROPDOWN)
+                    # Tomamos la primera columna de esa tabla como las opciones
+                    opciones = tabla_fuente.iloc[:, 0].unique()
+                    inputs_usuario[label_campo] = st.selectbox(label_campo, opciones, key=key_unica)
                 else:
-                    # TEXT INPUT
-                    user_inputs[label] = st.text_input(label, key=unique_key)
+                    # ES TEXTO LIBRE
+                    inputs_usuario[label_campo] = st.text_input(label_campo, key=key_unica)
 
         st.markdown("---")
-        submitted = st.form_submit_button("✅ Calcular", type="primary")
+        boton_calcular = st.form_submit_button("✅ Procesar Datos", type="primary")
 
-    if submitted:
-        st.success("Información capturada:")
-        st.json(user_inputs)
+    # --- 3. RESULTADO ---
+    if boton_calcular:
+        st.success("Campos capturados correctamente:")
+        st.json(inputs_usuario)
+        
+        # Aquí podremos agregar la matemática más adelante.
 
 if __name__ == "__main__":
     main()

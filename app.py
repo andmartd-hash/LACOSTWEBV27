@@ -162,8 +162,8 @@ st.sidebar.write(f"Contingencia: **{contingencia*100:.1f}%**")
 # --- 1. OFFERING ---
 st.subheader("🛠️ 1. Offering / Service Cost")
 
-# Fila 1: Selección Offering
-o1, o2 = st.columns([3,1])
+# Fila 1: Selección Offering (Ancho controlado agregando columna vacía '_')
+o1, o2, _ = st.columns([3, 1, 2]) 
 offer_list = df_offering['Offering'].unique()
 offer_sel = o1.selectbox("Offering", offer_list)
 # Info extra
@@ -171,7 +171,7 @@ row_off = df_offering[df_offering['Offering'] == offer_sel].iloc[0]
 o2.text_input("Info", f"L40: {row_off.get('L40','-')} | Conga: {row_off.get('Load in conga','-')}", disabled=True)
 
 # Fila 2: Cantidades y Factores
-c1, c2, c3, c4 = st.columns([1, 2, 1, 1])
+c1, c2, c3, c4, _ = st.columns([1, 2, 1, 1, 2])
 qty = c1.number_input("QTY", min_value=1, value=1)
 slc_op = c2.selectbox("SLC", df_slc['SLC'].unique())
 
@@ -184,14 +184,14 @@ except: pass
 c3.metric("UPLF", uplf)
 
 # Fechas Servicio
-d_s1, d_s2, d_s3 = st.columns([2, 2, 1])
+d_s1, d_s2, d_s3, _ = st.columns([2, 2, 1, 2])
 fs_ini = d_s1.date_input("Inicio Servicio", f_ini)
 fs_fin = d_s2.date_input("Fin Servicio", f_fin)
 dur_serv = calcular_duracion(fs_ini, fs_fin)
 d_s3.metric("Meses", dur_serv)
 
 # Costos
-u1, u2 = st.columns(2)
+u1, u2, _ = st.columns([1, 1, 1])
 costo_unit_usd = u1.number_input("Costo Unitario (USD)", value=0.0, format="%.2f")
 u2.text_input(f"Ref. Local ({pais})", value=f"{costo_unit_usd * tasa_er:,.2f}", disabled=True)
 
@@ -207,7 +207,7 @@ st.markdown("---")
 # --- 2. MACHINE / MANAGE ---
 st.subheader("💻 2. Machine & Manage Cost")
 
-rad1, rad2 = st.columns([1,3])
+rad1, rad2, _ = st.columns([1, 2, 1])
 tipo_fuente = rad1.radio("Fuente Datos", ["Machine Category", "Brand Rate Full"])
 
 if tipo_fuente == "Machine Category":
@@ -234,7 +234,7 @@ if item_maq:
 st.write(f"Costo Mensual Base: **USD {precio_mes:,.2f}**")
 
 # Manage Inputs
-m1, m2, m3, m4 = st.columns([1, 1, 1, 1])
+m1, m2, m3, m4, _ = st.columns([1, 1, 1, 1, 2])
 horas = m1.number_input("Horas", min_value=0.0)
 fm_ini = m2.date_input("Inicio Manage", f_ini)
 fm_fin = m3.date_input("Fin Manage", f_fin)

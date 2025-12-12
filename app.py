@@ -4,9 +4,8 @@ from datetime import date
 from dateutil.relativedelta import relativedelta
 
 # --- CONFIGURACIÓN VISUAL ---
-st.set_page_config(page_title="Cotizador IBM V18", layout="wide", page_icon="📊")
+st.set_page_config(page_title="Cotizador IBM V19", layout="wide", page_icon="📊")
 
-# Estilos CSS para que se vea más corporativo (IBM Style)
 st.markdown("""
     <style>
     .big-font { font-size:20px !important; font-weight: bold; color: #0f62fe; }
@@ -14,14 +13,51 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("📊 Cotizador IBM - Cloud Web App")
-st.markdown("Herramienta de costeo basada en **UI_CONFIG V18**.")
+st.title("📊 Cotizador IBM - V19 Cloud App")
+st.markdown("Herramienta de costeo blindada para **UI_CONFIG V19**.")
+
+# --- FUNCIÓN DE LIMPIEZA DE DATOS (NUEVA) ---
+def clean_decimal(val):
+    """
+    Convierte cualquier formato (texto, %, comas) a número decimal (float).
+    Ejemplo: "2,5%" -> 0.025 | "$ 1.500,00" -> 1500.0
+    """
+    if pd.isna(val) or val == "":
+        return 0.0
+    
+    s_val = str(val).strip()
+    
+    # Manejo de porcentajes
+    is_percent = False
+    if "%" in s_val:
+        is_percent = True
+        s_val = s_val.replace("%", "")
+    
+    # Limpieza de simbolos de moneda y miles
+    # Asumimos punto como decimal si hay punto y coma, o estructura inglesa
+    # Si viene de excel español, la coma es decimal. Intentamos normalizar.
+    s_val = s_val.replace("$", "").replace("USD", "").replace(" ", "")
+    
+    try:
+        # Intento directo
+        num = float(s_val)
+    except:
+        try:
+            # Intento formato europeo/latam (1.000,00) -> Reemplazar punto por nada, coma por punto
+            clean_s = s_val.replace(".", "").replace(",", ".")
+            num = float(clean_s)
+        except:
+            return 0.0
+            
+    if is_percent:
+        return num / 100.0 if num > 1.0 else num # Ajuste heurístico, si es 2% -> 0.02
+    return num
 
 # --- 1. CARGA DE DATOS ---
 @st.cache_data
 def load_data():
     try:
-        # Leemos los CSV asegurando que no haya problemas de encoding
+        # Carga tolerante a errores de delimitador
         df_c = pd.read_csv("countries.csv")
         df_o = pd.read_csv("offering.csv")
         df_s = pd.read_csv("slc.csv")
@@ -36,129 +72,122 @@ df_countries, df_offering, df_slc, df_risk, df_lplat, df_lband = load_data()
 
 # Validación de carga
 if df_countries is None:
-    st.error("⚠️ Error Crítico: No se encuentran los archivos CSV en el repositorio.")
-    st.warning("Verifica que los archivos se llamen exactamente: countries.csv, offering.csv, slc.csv, risk.csv, lplat.csv, lband.csv")
+    st.error("⚠️ Error Crítico: No se encuentran los archivos CSV.")
+    st.info("Asegúrate de renombrar tus archivos en GitHub a: countries.csv, offering.csv, slc.csv, risk.csv, lplat.csv, lband.csv")
     st.stop()
 
 # --- FUNCIONES AUXILIARES ---
 def calcular_duracion(inicio, fin):
     delta = relativedelta(fin, inicio)
     meses = delta.years * 12 + delta.months + (1 if delta.days > 0 else 0)
-    return max(1, meses) # Mínimo 1 mes
-
-def limpiar_moneda(valor):
-    """Convierte cualquier basura de texto a float"""
-    if pd.isna(valor): return 0.0
-    try:
-        # Quitamos simbolos de moneda si existen y convertimos
-        return float(str(valor).replace('$','').replace(',','').strip())
-    except:
-        return 0.0
+    return max(1, meses)
 
 # ==========================================
-# BARRA LATERAL (SIDEBAR) - CONFIGURACIÓN
+# BARRA LATERAL (SIDEBAR)
 # ==========================================
 st.sidebar.header("1. Configuración Global")
-
-id_cot = st.sidebar.text_input("ID Cotización", "COT-2025-001")
+id_cot = st.sidebar.text_input("ID Cotización", "COT-2025-V19")
 
 # -- PAÍS --
-# Extraemos columnas de países (Asumimos columnas desde la 5ta en adelante en countries.csv)
-# Ojo: Hardcodeamos la lista para seguridad según tu UI_Config
-lista_paises = ["Argentina", "Brazil", "Chile", "Colombia", "Ecuador", "Peru", "Uruguay", "Venezuela", "Mexico"]
-pais = st.sidebar.selectbox("País (Country)", lista_paises)
+# Leemos columnas desde la 3ra en adelante para encontrar paises (V19 structure: Scope, Country, Arg...)
+cols_paises = [c for c in df_countries.columns if c not in ['Scope', 'Country', 'Unnamed: 0']]
+pais = st.sidebar.selectbox("País (Country)", cols_paises)
 
-moneda_tipo = st.sidebar.radio("Moneda (Currency)", ["USD", "Local"], horizontal=True)
+moneda_tipo = st.sidebar.radio("Moneda", ["USD", "Local"], horizontal=True)
 
 # -- TASA DE CAMBIO (ER) --
 tasa_er = 1.0
 try:
-    # Buscamos la fila donde la columna 'Country' (o col 1) es 'ER'
-    # df_countries structure: Scope, Country, Arg, Bra...
-    row_er = df_countries[df_countries.iloc[:, 1] == 'ER']
-    if not row_er.empty and pais in row_er.columns:
-        tasa_er = limpiar_moneda(row_er[pais].values[0])
+    # Buscamos la fila donde la columna 'Country' contiene 'ER' o 'Exchange Rate'
+    # Filtramos ignorando mayúsculas/minúsculas
+    row_er = df_countries[df_countries['Country'].astype(str).str.contains("ER", case=False, na=False)]
+    if not row_er.empty:
+        val_er = row_er[pais].values[0]
+        tasa_er = clean_decimal(val_er)
     else:
-        st.sidebar.error(f"No se encontró ER para {pais}, usando 1.0")
+        st.sidebar.warning("No se encontró fila 'ER' en countries.csv, usando 1.0")
+except Exception as e:
+    st.sidebar.error(f"Error leyendo ER: {e}")
+
+if moneda_tipo == "Local":
+    st.sidebar.info(f"Tasa (ER): {tasa_er:,.2f}")
+else:
+    st.sidebar.success("Base: USD")
+
+# -- RIESGO (FIXED) --
+# Lógica: Buscar Contingency basado en Risk
+riesgos_disp = df_risk['Risk'].unique()
+riesgo_sel = st.sidebar.selectbox("Nivel de Riesgo", riesgos_disp)
+
+contingencia = 0.0
+try:
+    row_risk = df_risk[df_risk['Risk'] == riesgo_sel]
+    if not row_risk.empty:
+        # Usamos la función clean_decimal para evitar el ValueError
+        raw_val = row_risk['Contingency'].values[0]
+        contingencia = clean_decimal(raw_val)
 except:
     pass
 
-if moneda_tipo == "Local":
-    st.sidebar.info(f"Tasa de Cambio (ER): {tasa_er:,.2f}")
-else:
-    st.sidebar.success("Moneda Base: USD")
-
-# -- RIESGO (FIX DEL ERROR) --
-riesgos = df_risk['Risk'].dropna().unique().tolist()
-riesgo_sel = st.sidebar.selectbox("Nivel de Riesgo (QA Risk)", riesgos)
-
-# Aquí estaba el error: forzamos conversión a float
-try:
-    val_risk = df_risk[df_risk['Risk'] == riesgo_sel]['Contingency'].values[0]
-    contingencia = float(val_risk)
-except:
-    contingencia = 0.0
-
-st.sidebar.write(f"Contingencia aplicada: **{contingencia * 100:.1f}%**")
+st.sidebar.write(f"Contingencia: **{contingencia*100:.1f}%**")
 
 # ==========================================
 # CUERPO PRINCIPAL
 # ==========================================
-
-# --- DATOS CLIENTE ---
-with st.expander("📝 Datos del Cliente y Contrato", expanded=True):
+with st.expander("📝 Datos Cliente", expanded=True):
     c1, c2, c3 = st.columns(3)
-    c1.text_input("Customer Name", "Cliente Prueba")
-    c2.text_input("Customer Number", "00001")
-    c3.date_input("Quote Date", date.today(), disabled=True)
+    c1.text_input("Nombre Cliente")
+    c2.text_input("Número Cliente")
+    d1, d2 = st.columns(2)
+    f_ini = d1.date_input("Inicio Contrato", date.today())
+    f_fin = d2.date_input("Fin Contrato", date.today().replace(year=date.today().year + 1))
+    dur_contrato = calcular_duracion(f_ini, f_fin)
+    st.caption(f"Duración calculada: {dur_contrato} meses")
 
-    d1, d2, d3 = st.columns(3)
-    f_inicio = d1.date_input("Contract Start", date.today())
-    f_fin = d2.date_input("Contract End", date.today().replace(year=date.today().year + 1))
-    duracion_contrato = calcular_duracion(f_inicio, f_fin)
-    d3.metric("Duración Contrato", f"{duracion_contrato} Meses")
-
-# --- SECCIÓN 1: OFFERING / SERVICE ---
+# --- 1. OFFERING ---
 st.markdown("---")
 st.subheader("🛠️ 1. Offering / Service Cost")
 
-col_off1, col_off2 = st.columns([3, 1])
-offering_list = df_offering['Offering'].unique()
-offer_sel = col_off1.selectbox("Seleccione Offering", offering_list)
+# Selectores
+o1, o2 = st.columns([3,1])
+offer_list = df_offering['Offering'].unique()
+offer_sel = o1.selectbox("Offering", offer_list)
 
-# Info extra del offering
+# Info extra
 row_off = df_offering[df_offering['Offering'] == offer_sel].iloc[0]
-l40_txt = str(row_off['L40']) if 'L40' in row_off else "-"
-conga_txt = str(row_off['Load in conga']) if 'Load in conga' in row_off else "-"
-col_off2.caption(f"**L40:** {l40_txt} | **Conga:** {conga_txt}")
+o2.text_input("L40 / Conga", f"{row_off.get('L40','-')} | {row_off.get('Load in conga','-')}", disabled=True)
 
-# Detalles del cálculo
-s1, s2, s3, s4 = st.columns(4)
-qty = s1.number_input("Cantidad (QTY)", min_value=1, value=1)
-slc_op = s2.selectbox("SLC", df_slc['SLC'].unique())
+# Inputs Numéricos
+c_qty, c_slc, c_uplf = st.columns([1,2,1])
+qty = c_qty.number_input("QTY", min_value=1, value=1)
+slc_op = c_slc.selectbox("SLC", df_slc['SLC'].unique())
 
-# Buscar UPLF
+# UPLF Lookup
+uplf = 1.0
 try:
-    uplf_raw = df_slc[df_slc['SLC'] == slc_op]['UPLF'].values[0]
-    uplf = float(uplf_raw)
+    row_slc = df_slc[df_slc['SLC'] == slc_op]
+    if not row_slc.empty:
+        uplf = clean_decimal(row_slc['UPLF'].values[0])
 except:
-    uplf = 1.0
-s2.caption(f"Factor UPLF: {uplf}")
+    pass
+c_uplf.metric("Factor UPLF", uplf)
 
-fs_ini = s3.date_input("Service Start", f_inicio)
-fs_fin = s4.date_input("Service End", f_fin)
-duracion_servicio = calcular_duracion(fs_ini, fs_fin)
+# Fechas Servicio
+d_s1, d_s2 = st.columns(2)
+fs_ini = d_s1.date_input("Inicio Servicio", f_ini)
+fs_fin = d_s2.date_input("Fin Servicio", f_fin)
+dur_serv = calcular_duracion(fs_ini, fs_fin)
 
-# Costos
-uc1, uc2 = st.columns(2)
-costo_unit_usd = uc1.number_input("Costo Unitario (USD)", min_value=0.0, value=0.0, format="%.2f")
+# Costos Unitarios
+u1, u2 = st.columns(2)
+costo_unit_usd = u1.number_input("Costo Unitario (USD)", value=0.0, format="%.2f")
+# Si la moneda es local, mostramos la conversión estimada
+costo_ref_local = costo_unit_usd * tasa_er
+u2.text_input(f"Ref. Local ({pais})", value=f"{costo_ref_local:,.2f}", disabled=True)
 
-# Informativo Local
-uc2.text_input("Costo Unitario Local (Ref)", value=f"{costo_unit_usd * tasa_er:,.2f}", disabled=True)
-
-# CÁLCULO FINAL SERVICIO
-# Formula: (Unit Cost * Duration * Qty * UPLF)
-total_serv_usd = (costo_unit_usd * duracion_servicio) * qty * uplf
+# CÁLCULO SERVICIO
+# Formula V19: ((unitcost usd)*Duration)*qty*UPLF
+total_serv_usd = (costo_unit_usd * dur_serv) * qty * uplf
 
 if moneda_tipo == "Local":
     total_serv_final = total_serv_usd * tasa_er
@@ -167,103 +196,77 @@ else:
     total_serv_final = total_serv_usd
     simbolo = "USD"
 
-st.info(f"💰 Total Service Cost: {simbolo} {total_serv_final:,.2f}")
+st.info(f"Total Service Cost: {simbolo} {total_serv_final:,.2f}")
 
-# --- SECCIÓN 2: MACHINE / MANAGE ---
+# --- 2. MACHINE / MANAGE ---
 st.markdown("---")
-st.subheader("💻 2. Machine Category / Manage Cost")
+st.subheader("💻 2. Machine & Manage Cost")
 
-m1, m2 = st.columns(2)
-# Selector de tipo de base de datos
-tipo_base = m1.radio("Fuente de Datos", ["Machine Category (LPLAT)", "Brand Rate Full (LBAND)"], horizontal=True)
+rad1, rad2 = st.columns([1,3])
+tipo_fuente = rad1.radio("Fuente", ["Machine Category", "Brand Rate Full"])
 
-# Lógica para seleccionar el DataFrame correcto
-if "LPLAT" in tipo_base:
+# Selección de DataFrame y Columna Clave
+if tipo_fuente == "Machine Category":
     df_active = df_lplat
-    col_item_name = 'MC/RR' # Asumiendo nombre de columna estándar o indice 1
+    key_col = "Machine Category" # Fallback name
 else:
     df_active = df_lband
-    col_item_name = 'MC/RR'
+    key_col = "Brand Rate Full" # Fallback name
 
-# Obtener lista de items
+# Intentamos encontrar la columna correcta del item (suele ser la 2da columna, indice 1)
+# En V19 parece llamarse 'MC/RR'
+col_item_idx = 1 
+items_disp = []
 try:
-    # Usamos iloc[:, 1] porque el nombre suele estar en la segunda columna
-    items_maquina = df_active.iloc[:, 1].dropna().unique().tolist()
-    item_maq = m2.selectbox("Seleccione Hardware/Servicio", items_maquina)
+    items_disp = df_active.iloc[:, col_item_idx].dropna().unique().tolist()
 except:
-    st.error("Error leyendo columnas de máquina. Verifique estructura CSV.")
-    items_maquina = []
-    item_maq = None
+    st.error("Error leyendo columnas de items.")
 
-# Buscar Precio Mensual
-precio_mensual_base = 0.0
+item_maq = rad2.selectbox("Seleccione Item", items_disp)
+
+# Buscar Precio
+precio_mes = 0.0
 if item_maq:
     try:
-        # Filtramos la fila
-        fila = df_active[df_active.iloc[:, 1] == item_maq]
-        # Buscamos la columna del país
-        if pais in fila.columns:
-            val_raw = fila[pais].values[0]
-            precio_mensual_base = limpiar_moneda(val_raw)
+        # Filtramos por la columna indice 1
+        fila = df_active[df_active.iloc[:, col_item_idx] == item_maq]
+        if not fila.empty and pais in fila.columns:
+            precio_mes = clean_decimal(fila[pais].values[0])
         else:
-            st.warning(f"No existe precio para {pais} en este item.")
+            st.warning(f"No hay precio para {pais}")
     except Exception as e:
-        st.error(f"Error extrayendo precio: {e}")
+        st.error(f"Error buscando precio: {e}")
 
-st.write(f"Costo Mensual Base ({pais}): **USD {precio_mensual_base:,.2f}**")
+st.write(f"Costo Mensual Base: **USD {precio_mes:,.2f}**")
 
-# Inputs Manage
-man1, man2, man3 = st.columns(3)
-horas = man1.number_input("Horas Dedicadas", min_value=0.0, value=0.0)
-fm_ini = man2.date_input("Manage Start", f_inicio)
-fm_fin = man3.date_input("Manage End", f_fin)
-duracion_manage = calcular_duracion(fm_ini, fm_fin)
+# Manage Inputs
+m1, m2, m3 = st.columns(3)
+horas = m1.number_input("Horas", min_value=0.0)
+fm_ini = m2.date_input("Inicio Manage", f_ini)
+fm_fin = m3.date_input("Fin Manage", f_fin)
+dur_man = calcular_duracion(fm_ini, fm_fin)
 
-# CÁLCULO FINAL MANAGE
-total_manage_usd = precio_mensual_base * horas * duracion_manage
-
+total_man_usd = precio_mes * horas * dur_man
 if moneda_tipo == "Local":
-    total_manage_final = total_manage_usd * tasa_er
+    total_man_final = total_man_usd * tasa_er
 else:
-    total_manage_final = total_manage_usd
+    total_man_final = total_man_usd
 
-st.info(f"💰 Total Manage Cost: {simbolo} {total_manage_final:,.2f}")
+st.info(f"Total Manage Cost: {simbolo} {total_man_final:,.2f}")
 
-# ==========================================
-# RESUMEN FINANCIERO
-# ==========================================
+# --- RESUMEN ---
 st.markdown("---")
-st.header("📑 Resumen Financiero")
+st.header("💰 Resumen Final")
 
-# Totales
-subtotal = total_serv_final + total_manage_final
-monto_riesgo = subtotal * contingencia
-gran_total = subtotal + monto_riesgo
+subtotal = total_serv_final + total_man_final
+val_riesgo = subtotal * contingencia
+total_total = subtotal + val_riesgo
 
-# Tarjetas métricas
-c_res1, c_res2, c_res3, c_res4 = st.columns(4)
-c_res1.metric("Subtotal", f"{simbolo} {subtotal:,.2f}")
-c_res2.metric("Riesgo (Contingencia)", f"{contingencia*100:.1f}%", f"+ {simbolo} {monto_riesgo:,.2f}")
-c_res3.metric("TOTAL FINAL", f"{simbolo} {gran_total:,.2f}", delta_color="normal")
-c_res4.metric("Moneda", moneda_tipo, f"ER: {tasa_er:,.2f}")
+k1, k2, k3 = st.columns(3)
+k1.metric("Subtotal", f"{simbolo} {subtotal:,.2f}")
+k2.metric(f"Riesgo ({contingencia*100:.1f}%)", f"{simbolo} {val_riesgo:,.2f}")
+k3.metric("TOTAL", f"{simbolo} {total_total:,.2f}")
 
-# JSON para depuración (oculto en expander)
-with st.expander("Ver desglose técnico"):
-    st.json({
-        "País": pais,
-        "ER Aplicado": tasa_er,
-        "UPLF": uplf,
-        "Contingencia": contingencia,
-        "Duración Contrato": duracion_contrato,
-        "Costo Mensual Máquina": precio_mensual_base
-    })
-
-```
-
-### Paso 3: Verifica tu `requirements.txt`
-Asegúrate de que este archivo en GitHub tenga estas líneas para que funcionen las fechas y los datos:
-
-```text
-streamlit
-pandas
-python-dateutil
+if st.checkbox("Mostrar Dataframes (Debug)"):
+    st.write("Countries:", df_countries.head())
+    st.write("Risk:", df_risk)

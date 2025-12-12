@@ -2,120 +2,124 @@ import streamlit as st
 import pandas as pd
 import os
 
-# --- Configuración Visual ---
-st.set_page_config(page_title="LACOSTWEB V27", layout="wide", page_icon="🧩")
+st.set_page_config(page_title="LACOSTWEB V27", layout="wide", page_icon="⚙️")
 
 # --- 1. CARGA DE DATOS ---
 @st.cache_data
 def load_data():
-    required_files = ["input", "countries", "risk", "offering", "slc", "lplat", "lband", "mcbr"]
-    loaded_data = {}
-    missing_files = []
+    # Lista de claves esperadas
+    keys = ["input", "countries", "risk", "offering", "slc", "lplat", "lband", "mcbr"]
+    loaded = {}
+    missing = []
 
-    for key in required_files:
-        possible_names = [
-            f"{key}.csv", f"{key.capitalize()}.csv", f"{key.upper()}.csv",
-            f"V12-BASE.xlsx - {key}.csv", f"V12-BASE.xlsx - {key.capitalize()}.csv"
-        ]
-        
-        file_found = False
-        for filename in possible_names:
-            if os.path.exists(filename):
+    for k in keys:
+        # Buscamos variantes de nombre
+        variants = [f"{k}.csv", f"{k.capitalize()}.csv", f"{k.upper()}.csv", 
+                    f"V12-BASE.xlsx - {k}.csv"]
+        found = False
+        for v in variants:
+            if os.path.exists(v):
                 try:
-                    df = pd.read_csv(filename)
-                    # Limpiamos nombres de columnas (quita espacios extra)
-                    df.columns = df.columns.str.strip() 
-                    loaded_data[key] = df
-                    file_found = True
+                    df = pd.read_csv(v)
+                    # Limpieza de columnas
+                    df.columns = df.columns.str.strip()
+                    # Limpieza de datos vacíos extraños
+                    df = df.dropna(how='all') 
+                    loaded[k] = df
+                    found = True
                     break
-                except Exception as e:
-                    st.error(f"Error leyendo {filename}: {e}")
-        
-        if not file_found:
-            missing_files.append(key)
-    
-    return loaded_data, missing_files
+                except: pass
+        if not found: missing.append(k)
+    return loaded, missing
 
 def main():
-    st.title("🧩 LACOSTWEB V27 - Cotizador Dinámico")
+    st.title("⚙️ LACOSTWEB V27 - Configurador de Input")
 
     dfs, missing = load_data()
-    
     if missing:
-        st.error(f"❌ FALTAN ARCHIVOS: {', '.join(missing)}")
+        st.error(f"Faltan archivos: {missing}")
         st.stop()
-        
+    
     if "input" not in dfs:
-        st.error("❌ Se requiere 'input.csv' para generar la vista.")
+        st.error("Falta input.csv")
         st.stop()
-
-    # --- 2. GENERADOR DE FORMULARIO ---
-    st.info("Configuración generada desde `input.csv`")
 
     df_input = dfs["input"]
-    seleccion_usuario = {}
 
-    with st.form("form_cotizador"):
-        col1, col2 = st.columns(2)
+    # --- 2. CONFIGURACIÓN MANUAL DE COLUMNAS ---
+    with st.sidebar:
+        st.header("🔧 Mapeo de Lógica")
+        st.info("Ayúdame a entender tu archivo 'input.csv'. Selecciona qué columna es cuál:")
         
-        # Obtenemos nombres de columnas del input.csv
-        campos = df_input.columns
-        col_nombre_campo = campos[0] # Asumimos col 0 es el Label
+        cols = df_input.columns.tolist()
         
-        # Intentamos detectar columna fuente (Col 1)
-        col_fuente = campos[1] if len(campos) > 1 else None
+        # El usuario elige cuál columna tiene el NOMBRE (Label)
+        col_label = st.selectbox("¿Columna de NOMBRE/ETIQUETA?", cols, index=0)
+        
+        # El usuario elige cuál columna tiene la FUENTE (Source/List)
+        # (Ej: donde dice 'Countries', 'Offering', etc.)
+        col_source = st.selectbox("¿Columna de FUENTE/LISTA?", ["(Ninguna)"] + cols, index=1 if len(cols)>1 else 0)
 
-        # --- CORRECCIÓN DE ERROR DUPLICATE KEY ---
-        # Usamos 'enumerate' para tener un índice único (idx)
+        st.divider()
+        st.write("Tablas disponibles para cruzar:", list(dfs.keys()))
+
+    # --- 3. VISUALIZADOR DE DIAGNÓSTICO ---
+    with st.expander("👀 Ver contenido real de input.csv (Para verificar)", expanded=True):
+        st.dataframe(df_input.head(10), use_container_width=True)
+
+    # --- 4. RENDERIZADO DEL FORMULARIO ---
+    st.subheader("Vista Previa del Formulario")
+    
+    user_selections = {}
+    
+    with st.form("form_dinamico"):
+        c1, c2 = st.columns(2)
+        
+        # Iteramos usando las columnas que TÚ elegiste
         for idx, row in df_input.iterrows():
             
-            # Convertimos a string y manejamos vacíos
-            label_raw = row[col_nombre_campo]
-            label = str(label_raw).strip() if pd.notna(label_raw) else f"Campo_{idx}"
+            # 1. Obtener Etiqueta
+            label_val = row[col_label]
+            if pd.isna(label_val): continue # Saltar filas vacías
+            label = str(label_val).strip()
             
-            # Llave única interna para evitar el crash
-            unique_key = f"{label}_{idx}"
+            # Clave única
+            unique_key = f"field_{idx}_{label}"
+            
+            # 2. Determinar si es Lista o Texto
+            es_lista = False
+            lista_opciones = []
+            
+            # Si el usuario configuró una columna de fuente
+            if col_source != "(Ninguna)" and pd.notna(row[col_source]):
+                fuente_str = str(row[col_source]).strip().lower()
+                
+                # Buscamos si esa fuente existe como tabla cargada (ej: 'countries')
+                # O si es una referencia directa a un nombre de archivo
+                
+                # Búsqueda exacta
+                if fuente_str in dfs:
+                    es_lista = True
+                    # Asumimos que la lista está en la 1ra columna de esa tabla
+                    lista_opciones = dfs[fuente_str].iloc[:, 0].unique()
+                
+                # Búsqueda parcial (ej: Input dice 'Risk' y la tabla es 'risk')
+                elif fuente_str.lower() in dfs:
+                    es_lista = True
+                    lista_opciones = dfs[fuente_str.lower()].iloc[:, 0].unique()
 
-            donde_pintar = col1 if idx % 2 == 0 else col2
-            
-            # Lógica para decidir si es lista o texto
-            tabla_referencia = None
-            
-            # 1. Chequeo por columna explicita
-            if col_fuente and pd.notna(row[col_fuente]):
-                nombre_tabla = str(row[col_fuente]).lower().strip()
-                if nombre_tabla in dfs:
-                    tabla_referencia = dfs[nombre_tabla]
-            
-            # 2. Chequeo por coincidencia de nombre
-            if tabla_referencia is None and label.lower() in dfs:
-                tabla_referencia = dfs[label.lower()]
-
-            with donde_pintar:
-                if tabla_referencia is not None:
-                    # SELECTBOX
-                    opciones = tabla_referencia.iloc[:, 0].unique()
-                    # Usamos unique_key aquí para evitar el error
-                    seleccion_usuario[label] = st.selectbox(label, options=opciones, key=unique_key)
+            # Pintar el control
+            target_col = c1 if idx % 2 == 0 else c2
+            with target_col:
+                if es_lista:
+                    user_selections[label] = st.selectbox(f"{label}", lista_opciones, key=unique_key)
                 else:
-                    # TEXT INPUT
-                    # Usamos unique_key aquí para evitar el error
-                    seleccion_usuario[label] = st.text_input(label, key=unique_key)
+                    user_selections[label] = st.text_input(f"{label}", key=unique_key)
 
         st.markdown("---")
-        # El botón de submit DEBE estar dentro del bloque 'with st.form'
-        submitted = st.form_submit_button("💾 Calcular Escenario")
-
-    # --- 3. RESULTADOS ---
-    if submitted:
-        st.success("✅ Datos capturados")
-        st.write("Valores seleccionados:")
-        st.json(seleccion_usuario)
-
-    # --- Debug ---
-    with st.expander("Ver Tablas (Admin)"):
-        t = st.selectbox("Tabla", list(dfs.keys()))
-        st.dataframe(dfs[t])
+        if st.form_submit_button("Validar"):
+            st.success("Formulario generado con tu lógica.")
+            st.write(user_selections)
 
 if __name__ == "__main__":
     main()

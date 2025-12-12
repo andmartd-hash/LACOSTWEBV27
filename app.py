@@ -8,27 +8,33 @@ st.set_page_config(page_title="LACOSTWEB V27", layout="wide", page_icon="🏢")
 # --- Función para cargar datos ---
 @st.cache_data
 def load_data():
-    # Diccionario con los nombres EXACTOS de tus archivos
-    # Si cambias los nombres en GitHub, debes cambiarlos aquí también.
+    # AHORA SI: Nombres cortos confirmados por el diagnóstico
     file_map = {
-        "input": "V12-BASE.xlsx - input.csv",
-        "countries": "V12-BASE.xlsx - countries.csv",
-        "risk": "V12-BASE.xlsx - Risk.csv",
-        "offering": "V12-BASE.xlsx - Offering.csv",
-        "slc": "V12-BASE.xlsx - SLC.csv",
-        "lplat": "V12-BASE.xlsx - Lplat.csv",
-        "lband": "V12-BASE.xlsx - Lband.csv",
-        "mcbr": "V12-BASE.xlsx - MCBR.csv"
+        "input": "input.csv",
+        "countries": "countries.csv",
+        "risk": "risk.csv",        # ¡Asegúrate de subir este!
+        "offering": "offering.csv",
+        "slc": "slc.csv",          # ¡Asegúrate de subir este!
+        "lplat": "lplat.csv",
+        "lband": "lband.csv",
+        "mcbr": "mcbr.csv"
     }
 
     loaded_data = {}
     missing_files = []
 
     for key, filename in file_map.items():
+        # Verificación insensible a mayúsculas/minúsculas para evitar errores tontos
         if os.path.exists(filename):
             try:
                 loaded_data[key] = pd.read_csv(filename)
             except Exception as e:
+                st.error(f"Error leyendo {filename}: {e}")
+        # Intento alternativo (por si se subió como Risk.csv en vez de risk.csv)
+        elif os.path.exists(filename.capitalize()):
+             try:
+                loaded_data[key] = pd.read_csv(filename.capitalize())
+             except Exception as e:
                 st.error(f"Error leyendo {filename}: {e}")
         else:
             missing_files.append(filename)
@@ -41,30 +47,25 @@ def main():
     # Intentamos cargar los datos
     dfs, missing = load_data()
     
-    # --- BLOQUE DE DIAGNÓSTICO DE ERRORES ---
+    # --- BLOQUE DE DIAGNÓSTICO ---
     if missing:
-        st.error("❌ FALTAN ARCHIVOS IMPORTANTE")
-        st.write("El sistema no encuentra estos archivos en la carpeta principal:")
+        st.error("❌ AÚN FALTAN ARCHIVOS")
+        st.write("Por favor sube estos archivos a GitHub:")
         st.code("\n".join(missing))
-        
-        st.warning("🧐 DIAGNÓSTICO: Estos son los archivos que SÍ veo en el servidor:")
-        # Esto imprimirá la lista real de archivos en la nube para que veamos el error
-        files_in_dir = os.listdir('.')
-        st.code("\n".join(files_in_dir))
-        
-        st.stop() # Detiene la app aquí si faltan archivos
+        st.stop()
     
-    # Si todo está bien, continuamos...
-    st.success("✅ Todas las tablas maestras (V12-BASE) cargadas correctamente.")
+    # Si llegamos aquí, ¡todo cargó!
+    st.success("✅ Sistema iniciado. Tablas maestras cargadas.")
     
     # --- BARRA LATERAL ---
     with st.sidebar:
         st.header("1. Configuración del Deal")
         
         # Selector de PAÍS
-        # Ajustamos para leer la columna correcta, asumiendo que es la primera si no sabemos el nombre
         if not dfs["countries"].empty:
-            lista_paises = dfs["countries"].iloc[:, 0].unique()
+            # Asumimos columna 0 si no hay nombre específico, ajusta si es necesario
+            col_pais = dfs["countries"].columns[0]
+            lista_paises = dfs["countries"][col_pais].unique()
             pais_selec = st.selectbox("Seleccionar País", lista_paises)
         
         moneda = st.radio("Moneda de Salida", ["USD", "COP"])
@@ -78,14 +79,17 @@ def main():
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            lista_offerings = dfs["offering"].iloc[:, 0].unique()
+            col_off = dfs["offering"].columns[0]
+            lista_offerings = dfs["offering"][col_off].unique()
             offering_selec = st.selectbox("Offering / Servicio", lista_offerings)
 
-            lista_bands = dfs["lband"].iloc[:, 0].unique()
+            col_band = dfs["lband"].columns[0]
+            lista_bands = dfs["lband"][col_band].unique()
             band_selec = st.selectbox("Band / Nivel", lista_bands)
 
         with col2:
-            lista_plat = dfs["lplat"].iloc[:, 0].unique()
+            col_plat = dfs["lplat"].columns[0]
+            lista_plat = dfs["lplat"][col_plat].unique()
             plat_selec = st.selectbox("Plataforma", lista_plat)
             fte_cantidad = st.number_input("Cantidad FTE", value=1.0)
 

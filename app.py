@@ -2,124 +2,140 @@ import streamlit as st
 import pandas as pd
 import os
 
-st.set_page_config(page_title="LACOSTWEB V27", layout="wide", page_icon="⚙️")
+# --- Configuración Visual ---
+st.set_page_config(page_title="LACOSTWEB V13", layout="wide", page_icon="📝")
 
-# --- 1. CARGA DE DATOS ---
+# --- 1. CARGA DE DATOS INTELIGENTE ---
 @st.cache_data
 def load_data():
-    # Lista de claves esperadas
-    keys = ["input", "countries", "risk", "offering", "slc", "lplat", "lband", "mcbr"]
-    loaded = {}
-    missing = []
+    # Estas son las claves internas que usaremos en el código
+    required_keys = ["ui_config", "countries", "risk", "offering", "slc", "lplat", "lband", "mcbr"]
+    
+    loaded_data = {}
+    missing_files = []
 
-    for k in keys:
-        # Buscamos variantes de nombre
-        variants = [f"{k}.csv", f"{k.capitalize()}.csv", f"{k.upper()}.csv", 
-                    f"V12-BASE.xlsx - {k}.csv"]
-        found = False
-        for v in variants:
-            if os.path.exists(v):
+    for key in required_keys:
+        # El sistema buscará el archivo con estos posibles nombres (en orden de prioridad)
+        # 1. Nombre corto limpio (ej: risk.csv)
+        # 2. Nombre con mayúscula (ej: Risk.csv)
+        # 3. Nombre original largo (ej: V13-BASE.xlsx - Risk.csv)
+        possible_filenames = [
+            f"{key}.csv", 
+            f"{key.capitalize()}.csv",
+            f"{key.upper()}.csv",
+            f"V13-BASE.xlsx - {key}.csv",           # Nombre exacto minúscula
+            f"V13-BASE.xlsx - {key.capitalize()}.csv", # Nombre exacto Capitalizado
+            f"V13-BASE.xlsx - {key.upper()}.csv"       # Nombre exacto MAYÚSCULA
+        ]
+        
+        # Caso especial para UI_CONFIG que a veces viene en mayúsculas
+        if key == "ui_config":
+            possible_filenames.append("V13-BASE.xlsx - UI_CONFIG.csv")
+
+        file_found = False
+        for filename in possible_filenames:
+            if os.path.exists(filename):
                 try:
-                    df = pd.read_csv(v)
-                    # Limpieza de columnas
+                    df = pd.read_csv(filename)
+                    # Limpiamos nombres de columnas (quitamos espacios extra)
                     df.columns = df.columns.str.strip()
-                    # Limpieza de datos vacíos extraños
-                    df = df.dropna(how='all') 
-                    loaded[k] = df
-                    found = True
-                    break
-                except: pass
-        if not found: missing.append(k)
-    return loaded, missing
+                    # Eliminamos filas completamente vacías
+                    df = df.dropna(how='all')
+                    loaded_data[key] = df
+                    file_found = True
+                    break # Encontramos el archivo, dejamos de buscar
+                except Exception as e:
+                    print(f"Error leyendo {filename}: {e}")
+        
+        if not file_found:
+            missing_files.append(key)
+    
+    return loaded_data, missing_files
 
 def main():
-    st.title("⚙️ LACOSTWEB V27 - Configurador de Input")
+    st.title("📝 LACOSTWEB V13 - Cotizador")
+    st.markdown("**Andresma**, el sistema está listo con la configuración V13.")
 
+    # Cargar tablas
     dfs, missing = load_data()
+    
+    # Verificación de seguridad
     if missing:
-        st.error(f"Faltan archivos: {missing}")
+        st.error(f"❌ FALTAN ARCHIVOS: {', '.join(missing)}")
+        st.warning("Verifica que hayas subido los archivos CSV a GitHub.")
+        st.code(f"Archivos visibles en el servidor: {os.listdir('.')}")
         st.stop()
-    
-    if "input" not in dfs:
-        st.error("Falta input.csv")
+        
+    if "ui_config" not in dfs:
+        st.error("❌ Error Crítico: No se pudo cargar la tabla de configuración (UI_CONFIG).")
         st.stop()
 
-    df_input = dfs["input"]
-
-    # --- 2. CONFIGURACIÓN MANUAL DE COLUMNAS ---
-    with st.sidebar:
-        st.header("🔧 Mapeo de Lógica")
-        st.info("Ayúdame a entender tu archivo 'input.csv'. Selecciona qué columna es cuál:")
-        
-        cols = df_input.columns.tolist()
-        
-        # El usuario elige cuál columna tiene el NOMBRE (Label)
-        col_label = st.selectbox("¿Columna de NOMBRE/ETIQUETA?", cols, index=0)
-        
-        # El usuario elige cuál columna tiene la FUENTE (Source/List)
-        # (Ej: donde dice 'Countries', 'Offering', etc.)
-        col_source = st.selectbox("¿Columna de FUENTE/LISTA?", ["(Ninguna)"] + cols, index=1 if len(cols)>1 else 0)
-
-        st.divider()
-        st.write("Tablas disponibles para cruzar:", list(dfs.keys()))
-
-    # --- 3. VISUALIZADOR DE DIAGNÓSTICO ---
-    with st.expander("👀 Ver contenido real de input.csv (Para verificar)", expanded=True):
-        st.dataframe(df_input.head(10), use_container_width=True)
-
-    # --- 4. RENDERIZADO DEL FORMULARIO ---
-    st.subheader("Vista Previa del Formulario")
+    # --- 2. GENERADOR DEL FORMULARIO (Basado en UI_CONFIG) ---
+    df_config = dfs["ui_config"]
     
-    user_selections = {}
-    
-    with st.form("form_dinamico"):
+    # Detectamos las columnas del archivo de configuración
+    # Asumimos: Columna 0 = Nombre del Campo (Label)
+    # Asumimos: Columna 1 = Fuente de Datos (Source Table)
+    cols = df_config.columns
+    col_label = cols[0]
+    col_source = cols[1] if len(cols) > 1 else None
+
+    seleccion_usuario = {}
+
+    with st.form("form_cotizacion"):
         c1, c2 = st.columns(2)
         
-        # Iteramos usando las columnas que TÚ elegiste
-        for idx, row in df_input.iterrows():
+        for idx, row in df_config.iterrows():
+            # Obtener nombre del campo
+            val_label = row[col_label]
+            if pd.isna(val_label): continue # Saltar filas vacías
             
-            # 1. Obtener Etiqueta
-            label_val = row[col_label]
-            if pd.isna(label_val): continue # Saltar filas vacías
-            label = str(label_val).strip()
+            label = str(val_label).strip()
+            unique_key = f"input_{idx}_{label}" # Llave única interna
             
-            # Clave única
-            unique_key = f"field_{idx}_{label}"
+            # Determinar columna visual (Izquierda o Derecha)
+            col_destino = c1 if idx % 2 == 0 else c2
             
-            # 2. Determinar si es Lista o Texto
+            # --- LÓGICA: ¿Es Lista o Texto? ---
             es_lista = False
-            lista_opciones = []
+            opciones = []
             
-            # Si el usuario configuró una columna de fuente
-            if col_source != "(Ninguna)" and pd.notna(row[col_source]):
-                fuente_str = str(row[col_source]).strip().lower()
+            # 1. Verificar si la columna "Source" tiene un nombre de tabla válido
+            if col_source and pd.notna(row[col_source]):
+                fuente = str(row[col_source]).strip().lower()
                 
-                # Buscamos si esa fuente existe como tabla cargada (ej: 'countries')
-                # O si es una referencia directa a un nombre de archivo
-                
-                # Búsqueda exacta
-                if fuente_str in dfs:
+                # Buscamos en las tablas cargadas
+                if fuente in dfs:
                     es_lista = True
-                    # Asumimos que la lista está en la 1ra columna de esa tabla
-                    lista_opciones = dfs[fuente_str].iloc[:, 0].unique()
-                
-                # Búsqueda parcial (ej: Input dice 'Risk' y la tabla es 'risk')
-                elif fuente_str.lower() in dfs:
+                    opciones = dfs[fuente].iloc[:, 0].unique()
+                elif fuente.lower() in dfs: # Intento extra lowercase
                     es_lista = True
-                    lista_opciones = dfs[fuente_str.lower()].iloc[:, 0].unique()
+                    opciones = dfs[fuente.lower()].iloc[:, 0].unique()
+            
+            # 2. Si no hay source, verificar si el nombre del campo coincide con una tabla
+            if not es_lista and label.lower() in dfs:
+                es_lista = True
+                opciones = dfs[label.lower()].iloc[:, 0].unique()
 
-            # Pintar el control
-            target_col = c1 if idx % 2 == 0 else c2
-            with target_col:
+            # --- DIBUJAR ---
+            with col_destino:
                 if es_lista:
-                    user_selections[label] = st.selectbox(f"{label}", lista_opciones, key=unique_key)
+                    seleccion_usuario[label] = st.selectbox(label, options=opciones, key=unique_key)
                 else:
-                    user_selections[label] = st.text_input(f"{label}", key=unique_key)
+                    seleccion_usuario[label] = st.text_input(label, key=unique_key)
 
         st.markdown("---")
-        if st.form_submit_button("Validar"):
-            st.success("Formulario generado con tu lógica.")
-            st.write(user_selections)
+        submitted = st.form_submit_button("💾 Guardar Cotización", type="primary")
+
+    # --- 3. RESULTADOS ---
+    if submitted:
+        st.success("✅ Datos capturados correctamente")
+        st.json(seleccion_usuario)
+
+    # --- DEBUG (Opcional, para ver tablas) ---
+    with st.expander("🔍 Ver Tablas Maestras (Admin)"):
+        tab_sel = st.selectbox("Seleccionar Tabla", list(dfs.keys()))
+        st.dataframe(dfs[tab_sel], use_container_width=True)
 
 if __name__ == "__main__":
     main()

@@ -1,146 +1,102 @@
 import streamlit as st
 import pandas as pd
-import os
+from datetime import date
 
-# --- Configuración de la App ---
-st.set_page_config(page_title="Cotizador V18", layout="wide", page_icon="🏗️")
+# Configuración de la página
+st.set_page_config(page_title="Cotizador IBM V18", layout="wide")
 
-# --- 1. CARGADOR INTELIGENTE (Detecta V18) ---
+st.title("📊 Cotizador IBM - V18 Web App")
+st.markdown("Bienvenido Andresma. Esta app reemplaza tu Excel complejo.")
+
+# 1. Cargar datos (Cache para que sea rápido)
 @st.cache_data
-def load_data_v18():
-    """
-    Busca archivos en la carpeta que contengan las palabras clave.
-    Funciona con nombres largos (V18-BASE...) o cortos.
-    """
-    # Mapa de: Clave Interna -> Palabra a buscar en el nombre del archivo
-    keywords = {
-        "config":    "ui_config",
-        "countries": "countries",
-        "risk":      "risk",
-        "offering":  "offering",
-        "slc":       "slc",
-        "lplat":     "lplat",
-        "lband":     "lband",
-        "mcbr":      "mcbr"
-    }
-    
-    loaded_data = {}
-    missing_files = []
-    
-    # Listamos archivos reales en el servidor
-    files_in_dir = [f for f in os.listdir('.') if f.endswith('.csv')]
-    
-    for key, search_term in keywords.items():
-        found_filename = None
-        
-        # Buscamos coincidencias (insensible a mayúsculas)
-        for f in files_in_dir:
-            if search_term.lower() in f.lower():
-                found_filename = f
-                break
-        
-        if found_filename:
-            try:
-                df = pd.read_csv(found_filename)
-                df.columns = df.columns.str.strip() # Limpiar cabeceras
-                df = df.dropna(how='all') # Eliminar vacíos
-                loaded_data[key] = df
-            except Exception as e:
-                st.error(f"Error leyendo {found_filename}: {e}")
-        else:
-            missing_files.append(search_term)
-            
-    return loaded_data, missing_files
+def load_data():
+    # Asegúrate de que los nombres coincidan con los que subiste a GitHub
+    countries = pd.read_csv("V18-BASE.xlsx - countries.csv")
+    offering = pd.read_csv("V18-BASE.xlsx - offering.csv")
+    slc = pd.read_csv("V18-BASE.xlsx - slc.csv")
+    risk = pd.read_csv("V18-BASE.xlsx - risk.csv")
+    return countries, offering, slc, risk
 
-def main():
-    st.title("🏗️ LACOSTWEB V18")
+try:
+    df_countries, df_offering, df_slc, df_risk = load_data()
+    st.success("Bases de datos cargadas correctamente.")
+except Exception as e:
+    st.error(f"Error cargando archivos: {e}. Verifica que los CSV estén en el repo.")
+    st.stop()
 
-    # Cargar datos
-    dfs, missing = load_data_v18()
+# --- SECCIÓN DE ENTRADAS (INPUTS) ---
+st.sidebar.header("Configuración de Cotización")
 
-    # Validaciones
-    if missing:
-        st.warning(f"⚠️ Atención: No encuentro archivos para: {', '.join(missing)}")
-        st.info("Asegúrate de haber subido los archivos CSV a GitHub.")
-    
-    if "config" not in dfs:
-        st.error("❌ ERROR: No se encuentra el archivo UI_CONFIG.")
-        st.stop()
+# Selección de País
+country_list = df_countries['Country'].unique()
+selected_country = st.sidebar.selectbox("Selecciona el País", country_list)
 
-    # --- 2. MOTOR DE INTERFAZ (Tu lógica de 4 columnas) ---
-    df_config = dfs["config"]
-    
-    # Detectamos columnas por posición (0, 1, 2, 3)
-    # Col 0: Nombre del Campo
-    # Col 1: Fuente (Tabla)
-    # Col 2: Lógica (Instrucción)
-    # Col 3: Ejemplo (Valor por defecto)
-    try:
-        col_nombre  = df_config.columns[0]
-        col_fuente  = df_config.columns[1]
-        col_logica  = df_config.columns[2]
-        col_ejemplo = df_config.columns[3]
-    except IndexError:
-        st.error("⚠️ El archivo UI_CONFIG debe tener al menos 4 columnas.")
-        st.stop()
+# Filtrar moneda basada en país (Lógica de tu UI_CONFIG)
+country_data = df_countries[df_countries['Country'] == selected_country].iloc[0]
+currency = st.sidebar.radio("Moneda", ["USD", "Local"])
+exchange_rate = country_data['ER'] if currency == "Local" else 1.0
 
-    inputs_usuario = {}
+st.sidebar.metric("Tasa de Cambio (ER)", f"{exchange_rate:,.2f}")
 
-    with st.form("form_v18"):
-        st.subheader("Configuración del Escenario")
-        
-        # Columnas para organizar
-        c1, c2 = st.columns(2)
+# Selección de Offering
+offering_list = df_offering['Offering'].unique()
+selected_offering = st.selectbox("Selecciona el Offering (Servicio)", offering_list)
 
-        for idx, row in df_config.iterrows():
-            if pd.isna(row[col_nombre]): continue
-            
-            # --- Extraer datos de las 4 columnas ---
-            label = str(row[col_nombre]).strip()
-            fuente = str(row[col_fuente]).strip().lower() if pd.notna(row[col_fuente]) else ""
-            logica = str(row[col_logica]).strip() if pd.notna(row[col_logica]) else ""
-            ejemplo = str(row[col_ejemplo]).strip() if pd.notna(row[col_ejemplo]) else ""
-            
-            # ID único
-            uid = f"f_{idx}"
-            target_col = c1 if idx % 2 == 0 else c2
+# Selección de SLC
+slc_list = df_slc['SLC'].unique()
+selected_slc = st.selectbox("Selecciona SLC", slc_list)
 
-            with target_col:
-                # --- LÓGICA: LISTA O TEXTO ---
-                
-                tabla_datos = None
-                # Si hay fuente, buscamos la tabla correspondiente
-                if fuente:
-                    for k in dfs.keys():
-                        if fuente in k or k in fuente:
-                            tabla_datos = dfs[k]
-                            break
-                
-                if tabla_datos is not None:
-                    # ES LISTA (DROPDOWN)
-                    opciones = tabla_datos.iloc[:, 0].unique()
-                    inputs_usuario[label] = st.selectbox(
-                        label, 
-                        opciones, 
-                        key=uid,
-                        help=f"ℹ️ {logica}" # Columna 3: Lógica
-                    )
-                else:
-                    # ES CAMPO MANUAL (Usamos Columna 4: Ejemplo como default)
-                    inputs_usuario[label] = st.text_input(
-                        label, 
-                        value=ejemplo, 
-                        key=uid,
-                        help=f"ℹ️ {logica}" # Columna 3: Lógica
-                    )
+# Selección de Riesgo
+risk_list = df_risk['Risk'].unique()
+selected_risk = st.selectbox("Nivel de Riesgo", risk_list)
 
-        st.markdown("---")
-        submitted = st.form_submit_button("✅ Calcular", type="primary")
+# Fechas y Duración
+col1, col2 = st.columns(2)
+with col1:
+    start_date = st.date_input("Inicio de Contrato", date.today())
+with col2:
+    end_date = st.date_input("Fin de Contrato", date.today())
 
-    # --- 3. RESULTADOS ---
-    if submitted:
-        st.success("Datos capturados:")
-        st.json(inputs_usuario)
+# Cálculo simple de meses (aproximado)
+duration_months = (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month)
+st.info(f"Duración calculada: {duration_months} meses")
 
-if __name__ == "__main__":
-    main()
+# Inputs manuales de costos
+st.divider()
+st.subheader("Costos Unitarios")
+c1, c2, c3 = st.columns(3)
+qty = c1.number_input("Cantidad (QTY)", min_value=1, value=1)
+unit_cost = c2.number_input("Costo Unitario (USD)", min_value=0.0, value=100.0)
+
+# --- LÓGICA DE CÁLCULO (Simulando tus fórmulas de Excel) ---
+# Aquí replicamos la lógica: "si currency=USD, unitcost usd*1..."
+final_cost_usd = unit_cost * qty * duration_months
+
+# Factor de contingencia
+risk_factor = df_risk[df_risk['Risk'] == selected_risk]['Contingency'].iloc[0]
+total_con_riesgo = final_cost_usd * (1 + risk_factor)
+
+# Factor SLC (UPLF)
+uplf_row = df_slc[df_slc['SLC'] == selected_slc]
+# Nota: Aquí habría que filtrar por Scope si aplica, simplificado por ahora:
+uplf = uplf_row['UPLF'].iloc[0] if not uplf_row.empty else 1.0
+
+grand_total = total_con_riesgo * uplf
+
+# --- RESULTADOS ---
+st.divider()
+st.header("💰 Resultados de la Cotización")
+
+res_col1, res_col2 = st.columns(2)
+res_col1.metric("Costo Base Total (USD)", f"${final_cost_usd:,.2f}")
+res_col2.metric("Total Final (Inc. Riesgo + SLC)", f"${grand_total:,.2f}")
+
+# Mostrar tabla de desglose
+st.write("Detalle de factores aplicados:")
+st.json({
+    "País": selected_country,
+    "Tasa Cambio": exchange_rate,
+    "Factor Riesgo": risk_factor,
+    "Factor SLC (UPLF)": uplf
+})

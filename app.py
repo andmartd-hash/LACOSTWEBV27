@@ -79,6 +79,8 @@ def clean_decimal(val):
 @st.cache_data
 def load_data():
     try:
+        # Leemos CSVs
+        # Nota: Asegúrate que los encabezados estén en la fila 1 (header=0)
         df_c = pd.read_csv("countries.csv")
         df_o = pd.read_csv("offering.csv")
         df_s = pd.read_csv("slc.csv")
@@ -106,12 +108,12 @@ def calcular_duracion(inicio, fin):
 # ==========================================
 st.sidebar.header("📝 Configuración y Cliente")
 
-# 1. ID y Cliente (Movido aquí)
+# 1. ID y Cliente
 id_cot = st.sidebar.text_input("ID Cotización", "COT-2025-V29")
 c_name = st.sidebar.text_input("Nombre Cliente")
 c_num = st.sidebar.text_input("Número Cliente")
 
-# 2. Fechas Contrato (Compacto en 2 columnas)
+# 2. Fechas Contrato
 col_d1, col_d2 = st.sidebar.columns(2)
 f_ini = col_d1.date_input("Inicio Contrato", date.today())
 f_fin = col_d2.date_input("Fin Contrato", date.today().replace(year=date.today().year + 1))
@@ -123,7 +125,7 @@ st.sidebar.markdown("---")
 st.sidebar.subheader("🌎 Parámetros Económicos")
 
 # 3. País y Moneda
-# Filtramos columnas que no sean de metadata
+# Filtramos columnas de países evitando metadatos
 cols_paises = [c for c in df_countries.columns if c not in ['Scope', 'Country', 'Unnamed: 0', 'Currency', 'ER', 'Tax']]
 pais = st.sidebar.selectbox("País", cols_paises)
 
@@ -143,7 +145,7 @@ if moneda_tipo == "Local":
 else:
     st.sidebar.success("Base: USD")
 
-# 5. Riesgo (Mapeo Manual 2%, 5%, 8%)
+# 5. Riesgo
 riesgos_disp = df_risk['Risk'].unique()
 riesgo_sel = st.sidebar.selectbox("Nivel Riesgo", riesgos_disp)
 
@@ -151,7 +153,6 @@ mapa_riesgo = { "Low": 0.02, "Medium": 0.05, "High": 0.08 }
 if riesgo_sel in mapa_riesgo:
     contingencia = mapa_riesgo[riesgo_sel]
 else:
-    # Fallback
     contingencia = 0.0
     try:
         row_risk = df_risk[df_risk['Risk'] == riesgo_sel]
@@ -169,7 +170,7 @@ st.sidebar.write(f"Contingencia: **{contingencia*100:.1f}%**")
 # --- 1. OFFERING ---
 st.subheader("🛠️ 1. Offering / Service Cost")
 
-# Fila 1: Selección Offering (Ancho controlado agregando columna vacía '_')
+# Fila 1
 o1, o2, _ = st.columns([3, 1, 2]) 
 offer_list = df_offering['Offering'].unique()
 offer_sel = o1.selectbox("Offering", offer_list)
@@ -180,7 +181,7 @@ o2.text_input("Info", f"L40: {row_off.get('L40','-')} | Conga: {row_off.get('Loa
 # Campo Descripción
 st.text_input("Service Description", placeholder="Detalle del servicio...")
 
-# Fila 2: Cantidades y Factores
+# Fila 2
 c1, c2, c3, c4, _ = st.columns([1, 2, 1, 1, 2])
 qty = c1.number_input("QTY", min_value=1, value=1)
 slc_op = c2.selectbox("SLC", df_slc['SLC'].unique())
@@ -230,14 +231,15 @@ tipo_fuente = rad1.radio("Fuente Datos", ["Machine Category", "Brand Rate Full"]
 
 if tipo_fuente == "Machine Category":
     df_active = df_lplat
-    # LPLAT: Item está en columna C (indice 2)
+    # LPLAT (C): Item está en columna 2 (C)
+    # Matriz Costos E:M inicia en columna 4 (E)
     col_item_idx = 2 
 else:
     df_active = df_lband
-    # LBAND: Item está en columna D (indice 3)
+    # LBAND (D): Item está en columna 3 (D)
     col_item_idx = 3
 
-# Cargar Items
+# Cargar Items (Columna C para LPLAT, D para LBAND)
 try:
     items_disp = df_active.iloc[:, col_item_idx].dropna().unique().tolist()
 except: items_disp = []
@@ -248,19 +250,23 @@ item_maq = rad2.selectbox("Item", items_disp)
 precio_mes_raw = 0.0
 if item_maq:
     try:
-        # Filtramos por la columna correcta según índice
+        # Filtramos por la columna del item
         fila = df_active[df_active.iloc[:, col_item_idx] == item_maq]
+        
+        # Buscamos la columna del país seleccionado
+        # Las columnas de costo están en la matriz E:M, que corresponde a los nombres de países
         if not fila.empty and pais in fila.columns:
             precio_mes_raw = clean_decimal(fila[pais].values[0])
     except: pass
 
-# Convertir a USD para Base de Cálculo
+# Convertir SIEMPRE a USD para el campo "Monthly Cost (USD)"
+# Logica: Dato CSV (Local) / ER = USD
 if tasa_er > 0:
     precio_mes_usd = precio_mes_raw / tasa_er
 else:
     precio_mes_usd = 0.0
 
-# Campo Monthly Cost (Visible en USD)
+# Campo Monthly Cost (Visualiza Costo Machine en USD)
 rad3.text_input("Monthly Cost (USD)", value=f"{precio_mes_usd:,.2f}", disabled=True)
 
 # Manage Inputs
@@ -272,6 +278,12 @@ dur_man = calcular_duracion(fm_ini, fm_fin)
 m4.metric("Meses", dur_man)
 
 # Cálculo Total Manage
+# Formula V19: Monthly cost (Local) * Horas * Duration
+# Pero si Currency = Local -> dividir entre ER (Esto en UI_CONFIG está confuso,
+# pero la lógica estándar es: Costo Total siempre se calcula, luego se muestra en la moneda deseada).
+# Tu petición: "traer el costo ... en dolares" en el campo Monthly Cost.
+# Usaremos ese Monthly Cost USD como base para el total.
+
 total_man_usd = precio_mes_usd * horas * dur_man
 total_man_final = total_man_usd * tasa_er if moneda_tipo == "Local" else total_man_usd
 

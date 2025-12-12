@@ -8,41 +8,54 @@ st.set_page_config(page_title="LACostWeb V29", layout="wide", page_icon="📊")
 
 st.markdown("""
     <style>
-    /* 1. DISMINUCIÓN DE TAMAÑO DE LETRA Y ESPACIOS (Compacto) */
+    /* 1. ESTILO ULTRA COMPACTO (Global) */
     html, body, [class*="css"]  {
-        font-size: 12px !important; /* Letra más pequeña general */
+        font-size: 11px !important; /* Reducimos un punto más */
     }
     
-    /* Títulos más pequeños */
-    h1 { font-size: 1.8rem !important; }
-    h2 { font-size: 1.4rem !important; }
-    h3 { font-size: 1.1rem !important; }
+    /* Títulos */
+    h1 { font-size: 1.4rem !important; margin-bottom: 0.5rem !important; }
+    h2 { font-size: 1.2rem !important; margin-top: 0.5rem !important; }
+    h3 { font-size: 1.0rem !important; margin-top: 0.5rem !important; }
     
-    /* Inputs y Selectbox más compactos */
+    /* Inputs y Selectbox COMPACTOS */
     .stSelectbox div[data-baseweb="select"] > div {
-        font-size: 12px;
-        min-height: 30px;
+        font-size: 11px;
+        min-height: 28px;
+        padding: 0px 4px;
     }
     .stTextInput input, .stNumberInput input, .stDateInput input {
-        font-size: 12px;
-        min-height: 30px;
-        padding: 0.2rem 0.5rem;
+        font-size: 11px;
+        min-height: 28px;
+        padding: 0px 4px;
+    }
+    div[data-baseweb="input"] {
+        min-height: 28px;
     }
     
-    /* Reducir márgenes de la app */
-    .block-container {
+    /* Sidebar Compacta */
+    section[data-testid="stSidebar"] .block-container {
         padding-top: 1rem;
+        padding-bottom: 1rem;
+    }
+    section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"] {
+        gap: 0.5rem; /* Menos espacio entre elementos del sidebar */
+    }
+
+    /* Reducir márgenes del cuerpo principal */
+    .block-container {
+        padding-top: 0.5rem;
         padding-bottom: 2rem;
     }
     
-    /* Métricas compactas */
+    /* Métricas */
     .stMetric { 
-        background-color: #f4f4f4; 
-        padding: 5px 10px; 
-        border-radius: 5px; 
+        background-color: #f0f2f6; 
+        padding: 4px 8px; 
+        border-radius: 4px; 
     }
-    .stMetric label { font-size: 12px !important; }
-    .stMetric div[data-testid="stMetricValue"] { font-size: 18px !important; }
+    .stMetric label { font-size: 10px !important; }
+    .stMetric div[data-testid="stMetricValue"] { font-size: 16px !important; }
     
     </style>
     """, unsafe_allow_html=True)
@@ -50,64 +63,36 @@ st.markdown("""
 st.title("📊 LACostWeb V29")
 st.markdown("Herramienta de costeo **UI_CONFIG V19**.")
 
-# --- FUNCIÓN DE LIMPIEZA DE DATOS (NUEVA) ---
+# --- FUNCIÓN DE LIMPIEZA DE DATOS ---
 def clean_decimal(val):
-    """
-    Convierte cualquier formato (texto, %, comas) a número decimal (float).
-    Ejemplo: "2,5%" -> 0.025 | "$ 1.500,00" -> 1500.0
-    """
-    if pd.isna(val) or val == "":
-        return 0.0
-    
-    s_val = str(val).strip()
-    
-    # Manejo de porcentajes
-    is_percent = False
-    if "%" in s_val:
-        is_percent = True
-        s_val = s_val.replace("%", "")
-    
-    # Limpieza de simbolos de moneda y miles
-    # Asumimos punto como decimal si hay punto y coma, o estructura inglesa
-    # Si viene de excel español, la coma es decimal. Intentamos normalizar.
-    s_val = s_val.replace("$", "").replace("USD", "").replace(" ", "")
-    
+    if pd.isna(val) or val == "": return 0.0
+    s_val = str(val).strip().replace("%", "").replace("$", "").replace("USD", "").replace(" ", "")
     try:
-        # Intento directo
-        num = float(s_val)
+        return float(s_val)
     except:
         try:
-            # Intento formato europeo/latam (1.000,00) -> Reemplazar punto por nada, coma por punto
-            clean_s = s_val.replace(".", "").replace(",", ".")
-            num = float(clean_s)
+            return float(s_val.replace(".", "").replace(",", "."))
         except:
             return 0.0
-            
-    if is_percent:
-        return num / 100.0 if num > 1.0 else num # Ajuste heurístico, si es 2% -> 0.02
-    return num
 
 # --- 1. CARGA DE DATOS ---
 @st.cache_data
 def load_data():
     try:
-        # Carga tolerante a errores de delimitador
         df_c = pd.read_csv("countries.csv")
         df_o = pd.read_csv("offering.csv")
         df_s = pd.read_csv("slc.csv")
         df_r = pd.read_csv("risk.csv")
-        df_lp = pd.read_csv("lplat.csv") # Machine Category
-        df_lb = pd.read_csv("lband.csv") # Brand Rate
+        df_lp = pd.read_csv("lplat.csv")
+        df_lb = pd.read_csv("lband.csv")
         return df_c, df_o, df_s, df_r, df_lp, df_lb
-    except Exception as e:
+    except Exception:
         return None, None, None, None, None, None
 
 df_countries, df_offering, df_slc, df_risk, df_lplat, df_lband = load_data()
 
-# Validación de carga
 if df_countries is None:
-    st.error("⚠️ Error Crítico: No se encuentran los archivos CSV.")
-    st.info("Asegúrate de renombrar tus archivos en GitHub a: countries.csv, offering.csv, slc.csv, risk.csv, lplat.csv, lband.csv")
+    st.error("⚠️ Error Crítico: Faltan archivos CSV.")
     st.stop()
 
 # --- FUNCIONES AUXILIARES ---
@@ -117,183 +102,154 @@ def calcular_duracion(inicio, fin):
     return max(1, meses)
 
 # ==========================================
-# BARRA LATERAL (SIDEBAR)
+# BARRA LATERAL (SIDEBAR) - DATOS Y CONFIG
 # ==========================================
-st.sidebar.header("1. Configuración Global")
-id_cot = st.sidebar.text_input("ID Cotización", "COT-2025-V29")
+st.sidebar.header("📝 Configuración y Cliente")
 
-# -- PAÍS --
-# Leemos columnas desde la 3ra en adelante para encontrar paises (V19 structure: Scope, Country, Arg...)
+# 1. ID y Cliente (Movido aquí)
+id_cot = st.sidebar.text_input("ID Cotización", "COT-2025-V29")
+c_name = st.sidebar.text_input("Nombre Cliente")
+c_num = st.sidebar.text_input("Número Cliente")
+
+# 2. Fechas Contrato (Compacto en 2 columnas)
+col_d1, col_d2 = st.sidebar.columns(2)
+f_ini = col_d1.date_input("Inicio Contrato", date.today())
+f_fin = col_d2.date_input("Fin Contrato", date.today().replace(year=date.today().year + 1))
+
+dur_contrato = calcular_duracion(f_ini, f_fin)
+st.sidebar.info(f"📅 Duración Contrato: **{dur_contrato} Meses**")
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("🌎 Parámetros Económicos")
+
+# 3. País y Moneda
 cols_paises = [c for c in df_countries.columns if c not in ['Scope', 'Country', 'Unnamed: 0']]
-pais = st.sidebar.selectbox("País (Country)", cols_paises)
+pais = st.sidebar.selectbox("País", cols_paises)
 
 moneda_tipo = st.sidebar.radio("Moneda", ["USD", "Local"], horizontal=True)
 
-# -- TASA DE CAMBIO (ER) --
+# 4. Tasa de Cambio (ER)
 tasa_er = 1.0
 try:
-    # Buscamos la fila donde la columna 'Country' contiene 'ER' o 'Exchange Rate'
-    # Filtramos ignorando mayúsculas/minúsculas
     row_er = df_countries[df_countries['Country'].astype(str).str.contains("ER", case=False, na=False)]
     if not row_er.empty:
-        val_er = row_er[pais].values[0]
-        tasa_er = clean_decimal(val_er)
-    else:
-        st.sidebar.warning("No se encontró fila 'ER' en countries.csv, usando 1.0")
-except Exception as e:
-    st.sidebar.error(f"Error leyendo ER: {e}")
+        tasa_er = clean_decimal(row_er[pais].values[0])
+except:
+    pass
 
 if moneda_tipo == "Local":
-    st.sidebar.info(f"Tasa (ER): {tasa_er:,.2f}")
+    st.sidebar.success(f"Tasa (ER): {tasa_er:,.2f}")
 else:
     st.sidebar.success("Base: USD")
 
-# -- RIESGO (FIXED) --
-# Lógica: Buscar Contingency basado en Risk
+# 5. Riesgo
 riesgos_disp = df_risk['Risk'].unique()
-riesgo_sel = st.sidebar.selectbox("Nivel de Riesgo", riesgos_disp)
-
+riesgo_sel = st.sidebar.selectbox("Nivel Riesgo", riesgos_disp)
 contingencia = 0.0
 try:
     row_risk = df_risk[df_risk['Risk'] == riesgo_sel]
     if not row_risk.empty:
-        # Usamos la función clean_decimal para evitar el ValueError
-        raw_val = row_risk['Contingency'].values[0]
-        contingencia = clean_decimal(raw_val)
+        contingencia = clean_decimal(row_risk['Contingency'].values[0])
 except:
     pass
-
 st.sidebar.write(f"Contingencia: **{contingencia*100:.1f}%**")
 
+
 # ==========================================
-# CUERPO PRINCIPAL
+# CUERPO PRINCIPAL (SOLO COSTOS)
 # ==========================================
-with st.expander("📝 Datos Cliente", expanded=True):
-    c1, c2, c3 = st.columns(3)
-    c1.text_input("Nombre Cliente")
-    c2.text_input("Número Cliente")
-    d1, d2, d3 = st.columns([2, 2, 1])
-    f_ini = d1.date_input("Inicio Contrato", date.today())
-    f_fin = d2.date_input("Fin Contrato", date.today().replace(year=date.today().year + 1))
-    dur_contrato = calcular_duracion(f_ini, f_fin)
-    d3.metric("Duración Contrato", f"{dur_contrato} Meses")
 
 # --- 1. OFFERING ---
-st.markdown("---")
 st.subheader("🛠️ 1. Offering / Service Cost")
 
-# Selectores
+# Fila 1: Selección Offering
 o1, o2 = st.columns([3,1])
 offer_list = df_offering['Offering'].unique()
 offer_sel = o1.selectbox("Offering", offer_list)
-
 # Info extra
 row_off = df_offering[df_offering['Offering'] == offer_sel].iloc[0]
-o2.text_input("L40 / Conga", f"{row_off.get('L40','-')} | {row_off.get('Load in conga','-')}", disabled=True)
+o2.text_input("Info", f"L40: {row_off.get('L40','-')} | Conga: {row_off.get('Load in conga','-')}", disabled=True)
 
-# Inputs Numéricos
-c_qty, c_slc, c_uplf = st.columns([1,2,1])
-qty = c_qty.number_input("QTY", min_value=1, value=1)
-slc_op = c_slc.selectbox("SLC", df_slc['SLC'].unique())
+# Fila 2: Cantidades y Factores
+c1, c2, c3, c4 = st.columns([1, 2, 1, 1])
+qty = c1.number_input("QTY", min_value=1, value=1)
+slc_op = c2.selectbox("SLC", df_slc['SLC'].unique())
 
-# UPLF Lookup
 uplf = 1.0
 try:
     row_slc = df_slc[df_slc['SLC'] == slc_op]
     if not row_slc.empty:
         uplf = clean_decimal(row_slc['UPLF'].values[0])
-except:
-    pass
-c_uplf.metric("Factor UPLF", uplf)
+except: pass
+c3.metric("UPLF", uplf)
 
-# Fechas Servicio (AGREGADO DURACIÓN VISIBLE)
+# Fechas Servicio
 d_s1, d_s2, d_s3 = st.columns([2, 2, 1])
 fs_ini = d_s1.date_input("Inicio Servicio", f_ini)
 fs_fin = d_s2.date_input("Fin Servicio", f_fin)
 dur_serv = calcular_duracion(fs_ini, fs_fin)
-d_s3.metric("Duración (Meses)", dur_serv)
+d_s3.metric("Meses", dur_serv)
 
-# Costos Unitarios
+# Costos
 u1, u2 = st.columns(2)
 costo_unit_usd = u1.number_input("Costo Unitario (USD)", value=0.0, format="%.2f")
-# Si la moneda es local, mostramos la conversión estimada
-costo_ref_local = costo_unit_usd * tasa_er
-u2.text_input(f"Ref. Local ({pais})", value=f"{costo_ref_local:,.2f}", disabled=True)
+u2.text_input(f"Ref. Local ({pais})", value=f"{costo_unit_usd * tasa_er:,.2f}", disabled=True)
 
-# CÁLCULO SERVICIO
-# Formula V19: ((unitcost usd)*Duration)*qty*UPLF
+# Total Servicio
 total_serv_usd = (costo_unit_usd * dur_serv) * qty * uplf
+total_serv_final = total_serv_usd * tasa_er if moneda_tipo == "Local" else total_serv_usd
+simbolo = "$" if moneda_tipo == "Local" else "USD"
 
-if moneda_tipo == "Local":
-    total_serv_final = total_serv_usd * tasa_er
-    simbolo = "$"
-else:
-    total_serv_final = total_serv_usd
-    simbolo = "USD"
+st.info(f"Total Service: {simbolo} {total_serv_final:,.2f}")
 
-st.info(f"Total Service Cost: {simbolo} {total_serv_final:,.2f}")
+st.markdown("---")
 
 # --- 2. MACHINE / MANAGE ---
-st.markdown("---")
 st.subheader("💻 2. Machine & Manage Cost")
 
 rad1, rad2 = st.columns([1,3])
-tipo_fuente = rad1.radio("Fuente", ["Machine Category", "Brand Rate Full"])
+tipo_fuente = rad1.radio("Fuente Datos", ["Machine Category", "Brand Rate Full"])
 
-# Selección de DataFrame y Columna Clave
 if tipo_fuente == "Machine Category":
     df_active = df_lplat
-    key_col = "Machine Category" # Fallback name
 else:
     df_active = df_lband
-    key_col = "Brand Rate Full" # Fallback name
 
-# Intentamos encontrar la columna correcta del item (suele ser la 2da columna, indice 1)
-# En V19 parece llamarse 'MC/RR'
-col_item_idx = 1 
-items_disp = []
+# Items
+col_item_idx = 1
 try:
     items_disp = df_active.iloc[:, col_item_idx].dropna().unique().tolist()
-except:
-    st.error("Error leyendo columnas de items.")
+except: items_disp = []
 
-item_maq = rad2.selectbox("Seleccione Item", items_disp)
+item_maq = rad2.selectbox("Item", items_disp)
 
-# Buscar Precio
 precio_mes = 0.0
 if item_maq:
     try:
-        # Filtramos por la columna indice 1
         fila = df_active[df_active.iloc[:, col_item_idx] == item_maq]
         if not fila.empty and pais in fila.columns:
             precio_mes = clean_decimal(fila[pais].values[0])
-        else:
-            st.warning(f"No hay precio para {pais}")
-    except Exception as e:
-        st.error(f"Error buscando precio: {e}")
+    except: pass
 
 st.write(f"Costo Mensual Base: **USD {precio_mes:,.2f}**")
 
-# Manage Inputs (AGREGADO DURACIÓN VISIBLE)
+# Manage Inputs
 m1, m2, m3, m4 = st.columns([1, 1, 1, 1])
 horas = m1.number_input("Horas", min_value=0.0)
 fm_ini = m2.date_input("Inicio Manage", f_ini)
 fm_fin = m3.date_input("Fin Manage", f_fin)
 dur_man = calcular_duracion(fm_ini, fm_fin)
-m4.metric("Duración (Meses)", dur_man)
+m4.metric("Meses", dur_man)
 
 total_man_usd = precio_mes * horas * dur_man
-if moneda_tipo == "Local":
-    total_man_final = total_man_usd * tasa_er
-else:
-    total_man_final = total_man_usd
+total_man_final = total_man_usd * tasa_er if moneda_tipo == "Local" else total_man_usd
 
-st.info(f"Total Manage Cost: {simbolo} {total_man_final:,.2f}")
+st.info(f"Total Manage: {simbolo} {total_man_final:,.2f}")
+
+st.markdown("---")
 
 # --- RESUMEN ---
-st.markdown("---")
 st.header("💰 Resumen Final")
-
 subtotal = total_serv_final + total_man_final
 val_riesgo = subtotal * contingencia
 total_total = subtotal + val_riesgo
@@ -302,7 +258,3 @@ k1, k2, k3 = st.columns(3)
 k1.metric("Subtotal", f"{simbolo} {subtotal:,.2f}")
 k2.metric(f"Riesgo ({contingencia*100:.1f}%)", f"{simbolo} {val_riesgo:,.2f}")
 k3.metric("TOTAL", f"{simbolo} {total_total:,.2f}")
-
-if st.checkbox("Mostrar Dataframes (Debug)"):
-    st.write("Countries:", df_countries.head())
-    st.write("Risk:", df_risk)

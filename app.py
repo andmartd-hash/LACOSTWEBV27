@@ -92,7 +92,7 @@ def load_data():
 df_countries, df_offering, df_slc, df_risk, df_lplat, df_lband = load_data()
 
 if df_countries is None:
-    st.error("⚠️ Error Crítico: Faltan archivos CSV.")
+    st.error("⚠️ Error Crítico: Faltan archivos CSV. Verifica nombres en GitHub.")
     st.stop()
 
 # --- FUNCIONES AUXILIARES ---
@@ -123,7 +123,8 @@ st.sidebar.markdown("---")
 st.sidebar.subheader("🌎 Parámetros Económicos")
 
 # 3. País y Moneda
-cols_paises = [c for c in df_countries.columns if c not in ['Scope', 'Country', 'Unnamed: 0']]
+# Filtramos columnas que no sean de metadata
+cols_paises = [c for c in df_countries.columns if c not in ['Scope', 'Country', 'Unnamed: 0', 'Currency', 'ER', 'Tax']]
 pais = st.sidebar.selectbox("País", cols_paises)
 
 moneda_tipo = st.sidebar.radio("Moneda", ["USD", "Local"], horizontal=True)
@@ -142,34 +143,27 @@ if moneda_tipo == "Local":
 else:
     st.sidebar.success("Base: USD")
 
-# 5. Riesgo (CORREGIDO MANUALMENTE)
+# 5. Riesgo (Mapeo Manual 2%, 5%, 8%)
 riesgos_disp = df_risk['Risk'].unique()
 riesgo_sel = st.sidebar.selectbox("Nivel Riesgo", riesgos_disp)
 
-# Mapeo manual para asegurar los valores 2%, 5%, 8%
-mapa_riesgo = {
-    "Low": 0.02,
-    "Medium": 0.05,
-    "High": 0.08
-}
-
+mapa_riesgo = { "Low": 0.02, "Medium": 0.05, "High": 0.08 }
 if riesgo_sel in mapa_riesgo:
     contingencia = mapa_riesgo[riesgo_sel]
 else:
-    # Fallback por si el nombre es diferente (ej: Bajo, Alto)
+    # Fallback
     contingencia = 0.0
     try:
         row_risk = df_risk[df_risk['Risk'] == riesgo_sel]
         if not row_risk.empty:
             contingencia = clean_decimal(row_risk['Contingency'].values[0])
-    except:
-        pass
+    except: pass
 
 st.sidebar.write(f"Contingencia: **{contingencia*100:.1f}%**")
 
 
 # ==========================================
-# CUERPO PRINCIPAL (SOLO COSTOS)
+# CUERPO PRINCIPAL
 # ==========================================
 
 # --- 1. OFFERING ---
@@ -183,8 +177,8 @@ offer_sel = o1.selectbox("Offering", offer_list)
 row_off = df_offering[df_offering['Offering'] == offer_sel].iloc[0]
 o2.text_input("Info", f"L40: {row_off.get('L40','-')} | Conga: {row_off.get('Load in conga','-')}", disabled=True)
 
-# (NUEVO) Campo de Descripción del Servicio
-st.text_input("Service Description", placeholder="Descripción del servicio...")
+# Campo Descripción
+st.text_input("Service Description", placeholder="Detalle del servicio...")
 
 # Fila 2: Cantidades y Factores
 c1, c2, c3, c4, _ = st.columns([1, 2, 1, 1, 2])
@@ -223,54 +217,51 @@ st.markdown("---")
 # --- 2. MACHINE / MANAGE ---
 st.subheader("💻 2. Machine & Manage Cost")
 
-# 1. (NUEVO) OFFERING PARA MACHINE
+# 1. Offering para Machine
 m_off1, m_off2, _ = st.columns([3, 1, 2])
-# Usamos offer_list que ya cargamos arriba, pero con key única para no chocar
 offer_man_sel = m_off1.selectbox("Offering (Manage)", offer_list, key="offer_man")
-# Info extra
 row_off_man = df_offering[df_offering['Offering'] == offer_man_sel].iloc[0]
 m_off2.text_input("Info (Manage)", f"L40: {row_off_man.get('L40','-')} | Conga: {row_off_man.get('Load in conga','-')}", disabled=True)
 
-# 2. SELECCIÓN DE CATEGORÍA, MÁQUINA Y COSTO MENSUAL
-# Ajuste de layout: Fuente | Item (Más estrecho) | Monthly Cost (Campo Nuevo) | Espacio
+# 2. Selección Fuente y Item
 rad1, rad2, rad3, _ = st.columns([1.2, 1.2, 1, 2.6]) 
 
 tipo_fuente = rad1.radio("Fuente Datos", ["Machine Category", "Brand Rate Full"])
 
 if tipo_fuente == "Machine Category":
     df_active = df_lplat
-    # CORREGIDO: LPLAT usa columna C (índice 2) para el nombre del item
+    # LPLAT: Item está en columna C (indice 2)
     col_item_idx = 2 
 else:
     df_active = df_lband
-    # CORREGIDO: LBAND usa columna D (índice 3) para el nombre del item, "Def"
+    # LBAND: Item está en columna D (indice 3)
     col_item_idx = 3
 
-# Items
+# Cargar Items
 try:
     items_disp = df_active.iloc[:, col_item_idx].dropna().unique().tolist()
 except: items_disp = []
 
 item_maq = rad2.selectbox("Item", items_disp)
 
+# Buscar Precio Mensual (Local)
 precio_mes_raw = 0.0
 if item_maq:
     try:
+        # Filtramos por la columna correcta según índice
         fila = df_active[df_active.iloc[:, col_item_idx] == item_maq]
         if not fila.empty and pais in fila.columns:
             precio_mes_raw = clean_decimal(fila[pais].values[0])
     except: pass
 
-# --- CORRECCIÓN DE LÓGICA DE MONEDA (Monthly Cost) ---
-# Lógica: "si Currency=USD dividir el costo entre ER, si no multiplicar el costo *1"
-if moneda_tipo == "USD" and tasa_er > 0:
-    precio_mes_final = precio_mes_raw / tasa_er
+# Convertir a USD para Base de Cálculo
+if tasa_er > 0:
+    precio_mes_usd = precio_mes_raw / tasa_er
 else:
-    precio_mes_final = precio_mes_raw
+    precio_mes_usd = 0.0
 
-# (NUEVO) Campo "Monthly Cost" visualizado como input desactivado
-rad3.text_input("Monthly Cost", value=f"{simbolo} {precio_mes_final:,.2f}", disabled=True)
-
+# Campo Monthly Cost (Visible en USD)
+rad3.text_input("Monthly Cost (USD)", value=f"{precio_mes_usd:,.2f}", disabled=True)
 
 # Manage Inputs
 m1, m2, m3, m4, _ = st.columns([1, 1, 1, 1, 2])
@@ -280,9 +271,9 @@ fm_fin = m3.date_input("Fin Manage", f_fin)
 dur_man = calcular_duracion(fm_ini, fm_fin)
 m4.metric("Meses", dur_man)
 
-# CÁLCULO MANAGE (Usando el precio ya ajustado)
-# Total = Precio Ajustado * Horas * Duración
-total_man_final = precio_mes_final * horas * dur_man
+# Cálculo Total Manage
+total_man_usd = precio_mes_usd * horas * dur_man
+total_man_final = total_man_usd * tasa_er if moneda_tipo == "Local" else total_man_usd
 
 st.info(f"Total Manage: {simbolo} {total_man_final:,.2f}")
 

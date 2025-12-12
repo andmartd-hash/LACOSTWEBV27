@@ -2,116 +2,121 @@ import streamlit as st
 import pandas as pd
 import os
 
-# --- Configuración Visual ---
-st.set_page_config(page_title="LACOSTWEB V16", layout="wide", page_icon="🚀")
+st.set_page_config(page_title="LACOSTWEB V16", layout="wide", page_icon="🕵️")
 
-# --- 1. CONFIGURACIÓN DE ARCHIVOS V16 ---
-# Aquí están los nombres EXACTOS de los archivos que subiste.
-# El código buscará estos nombres largos.
-FILES = {
-    "config":    "V16-BASE.xlsx - UI_CONFIG.csv", # Mayúscula
-    "countries": "V16-BASE.xlsx - countries.csv", # Minúscula
-    "risk":      "V16-BASE.xlsx - risk.csv",      # Minúscula
-    "offering":  "V16-BASE.xlsx - offering.csv",  # Minúscula
-    "slc":       "V16-BASE.xlsx - slc.csv",       # Minúscula
-    "lplat":     "V16-BASE.xlsx - lplat.csv",     # Minúscula
-    "lband":     "V16-BASE.xlsx - lband.csv",     # Minúscula
-    "mcbr":      "V16-BASE.xlsx - mcbr.csv"       # Minúscula
-}
+# --- FUNCIÓN DE BÚSQUEDA INTELIGENTE ---
+def find_file_by_keyword(keyword, file_list):
+    """Busca un archivo que contenga la palabra clave (sin importar mayúsculas/minúsculas)"""
+    for filename in file_list:
+        if keyword.lower() in filename.lower() and filename.endswith(".csv"):
+            return filename
+    return None
 
 @st.cache_data
 def load_data():
+    # 1. Obtenemos la lista REAL de archivos en el servidor
+    all_files = os.listdir('.')
+    
+    # 2. Definimos qué buscar (palabras clave)
+    keywords = {
+        "config":    "ui_config", # Buscará algo que diga "ui_config"
+        "countries": "countries",
+        "risk":      "risk",
+        "offering":  "offering",
+        "slc":       "slc",
+        "lplat":     "lplat",
+        "lband":     "lband",
+        "mcbr":      "mcbr"
+    }
+
     data = {}
     missing = []
+    found_files_log = {}
 
-    for key, filename in FILES.items():
-        if os.path.exists(filename):
+    for key, search_term in keywords.items():
+        # Usamos la función inteligente
+        found_filename = find_file_by_keyword(search_term, all_files)
+        
+        if found_filename:
             try:
-                # Leemos el CSV
-                df = pd.read_csv(filename)
-                # Limpiamos espacios en los nombres de las columnas
+                df = pd.read_csv(found_filename)
                 df.columns = df.columns.str.strip()
-                # Limpiamos filas vacías
                 df = df.dropna(how='all')
                 data[key] = df
+                found_files_log[key] = found_filename
             except Exception as e:
-                st.error(f"Error leyendo el archivo {filename}: {e}")
+                st.error(f"Error leyendo {found_filename}: {e}")
         else:
-            missing.append(filename)
+            missing.append(search_term)
             
-    return data, missing
+    return data, missing, all_files, found_files_log
 
 def main():
-    st.title("🚀 LACOSTWEB V16")
-    st.markdown("**Andresma**, sistema listo. Versión V16.")
+    st.title("🕵️ LACOSTWEB - Auto-Detector")
 
-    # --- Carga de Datos ---
-    dfs, missing = load_data()
+    # Carga datos
+    dfs, missing, all_files, log = load_data()
 
+    # --- DIAGNÓSTICO ---
     if missing:
-        st.error("❌ FALTAN ARCHIVOS EN EL SERVIDOR")
-        st.warning("El código espera estos nombres EXACTOS (V16):")
+        st.error("❌ AÚN FALTAN ARCHIVOS")
+        st.write("El sistema buscó archivos que tuvieran estas palabras pero no encontró nada:")
         st.code("\n".join(missing))
+        
+        st.warning("🧐 ESTO ES LO QUE REALMENTE HAY EN EL SERVIDOR (Mira los nombres):")
+        st.code("\n".join(all_files))
         st.stop()
+
+    # Si todo cargó, mostramos qué archivos encontró para tu tranquilidad
+    with st.expander("✅ Archivos Detectados Correctamente (Click para ver detalles)"):
+        st.write(log)
 
     if "config" not in dfs:
-        st.error("❌ Error: No se encuentra 'UI_CONFIG.csv'")
+        st.error("❌ Error: Se encontraron archivos, pero no la configuración UI_CONFIG.")
         st.stop()
 
-    # --- 2. MOTOR DE UI (DINÁMICO) ---
+    # --- MOTOR DE LA APP ---
     df_config = dfs["config"]
-    
-    # Identificamos columnas de configuración
-    # Col 0 = Label, Col 1 = Source
     cols = df_config.columns
     col_label = cols[0]
     col_source = cols[1] if len(cols) > 1 else None
 
     user_inputs = {}
 
-    with st.form("form_v16"):
-        st.subheader("Configuración del Proyecto")
-        
+    with st.form("auto_form"):
+        st.subheader("Configuración del Escenario")
         c1, c2 = st.columns(2)
 
         for idx, row in df_config.iterrows():
             if pd.isna(row[col_label]): continue
-            
             label = str(row[col_label]).strip()
             
-            # --- BÚSQUEDA DE FUENTE DE DATOS ---
+            # Búsqueda de fuente
             tabla_asociada = None
-            
             if col_source and pd.notna(row[col_source]):
-                # Obtenemos el nombre que dice el Excel (ej: "Risk")
                 nombre_excel = str(row[col_source]).strip().lower()
                 
-                # Buscamos en nuestras llaves (countries, risk, etc.)
+                # Buscamos en las llaves cargadas
                 if nombre_excel in dfs:
                     tabla_asociada = dfs[nombre_excel]
                 elif nombre_excel.lower() in dfs:
                     tabla_asociada = dfs[nombre_excel.lower()]
 
-            # --- RENDERIZADO ---
+            # Renderizar
             destino = c1 if idx % 2 == 0 else c2
-            key_id = f"v16_{idx}_{label}"
+            key_id = f"input_{idx}"
 
             with destino:
                 if tabla_asociada is not None:
-                    # ES LISTA
                     opciones = tabla_asociada.iloc[:, 0].unique()
                     user_inputs[label] = st.selectbox(label, opciones, key=key_id)
                 else:
-                    # ES TEXTO
                     user_inputs[label] = st.text_input(label, key=key_id)
 
         st.markdown("---")
-        submitted = st.form_submit_button("✅ Calcular Cotización", type="primary")
-
-    # --- 3. RESULTADOS ---
-    if submitted:
-        st.success("Datos capturados correctamente:")
-        st.json(user_inputs)
+        if st.form_submit_button("✅ Calcular"):
+            st.success("Datos capturados:")
+            st.json(user_inputs)
 
 if __name__ == "__main__":
     main()

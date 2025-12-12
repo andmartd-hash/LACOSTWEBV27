@@ -10,12 +10,12 @@ st.set_page_config(page_title="LACOSTWEB V12", layout="wide", page_icon="📋")
 FILES = {
     "config":    "V12-BASE.xlsx - UI_CONGIF.csv", # <--- OJO: Lee CONGIF
     "countries": "V12-BASE.xlsx - countries.csv",
-    "risk":      "V12-BASE.xlsx - Risk.csv",
-    "offering":  "V12-BASE.xlsx - Offering.csv",
-    "slc":       "V12-BASE.xlsx - SLC.csv",
-    "lplat":     "V12-BASE.xlsx - Lplat.csv",
-    "lband":     "V12-BASE.xlsx - Lband.csv",
-    "mcbr":      "V12-BASE.xlsx - MCBR.csv"
+    "risk":      "V12-BASE.xlsx - risk.csv",
+    "offering":  "V12-BASE.xlsx - offering.csv",
+    "slc":       "V12-BASE.xlsx - slc.csv",
+    "lplat":     "V12-BASE.xlsx - lplat.csv",
+    "lband":     "V12-BASE.xlsx - lband.csv",
+    "mcbr":      "V12-BASE.xlsx - mcbr.csv"
 }
 
 @st.cache_data
@@ -162,3 +162,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

@@ -64,8 +64,9 @@ if df_countries is None:
 # --- FUNCIONES AUXILIARES ---
 def calcular_duracion(inicio, fin):
     delta = relativedelta(fin, inicio)
-    meses = delta.years * 12 + delta.months + (1 if delta.days > 0 else 0)
-    return max(1, meses)
+    # Cálculo preciso con decimales (días / 30)
+    meses_totales = delta.years * 12 + delta.months + (delta.days / 30.0)
+    return max(0.1, round(meses_totales, 1))
 
 # ==========================================
 # BARRA LATERAL
@@ -73,8 +74,14 @@ def calcular_duracion(inicio, fin):
 st.sidebar.markdown("---")
 st.sidebar.subheader("📝 Cliente y Contrato")
 
-# ID y Cliente
-id_cot = st.sidebar.text_input("ID Cotización", "COT-2025-V29")
+# ID Automático (Consecutivo en Sesión)
+if 'consecutivo_id' not in st.session_state:
+    st.session_state.consecutivo_id = 1
+
+id_cot_str = f"{st.session_state.consecutivo_id:04d}"
+st.sidebar.text_input("ID Cotización", value=id_cot_str, disabled=True)
+
+# Cliente
 c_name = st.sidebar.text_input("Nombre Cliente")
 c_num = st.sidebar.text_input("Número Cliente")
 
@@ -165,7 +172,7 @@ d_s1, d_s2, d_s3, _ = st.columns([2, 2, 1, 2])
 fs_ini = d_s1.date_input("Inicio Servicio", f_ini)
 fs_fin = d_s2.date_input("Fin Servicio", f_fin)
 dur_serv = calcular_duracion(fs_ini, fs_fin)
-d_s3.metric("Meses", dur_serv)
+d_s3.metric("Meses", f"{dur_serv:.1f}")
 
 # Costos - LÓGICA ESTRUCTURAL BRASIL VS OTROS
 u1, _ = st.columns([1, 1])
@@ -273,7 +280,7 @@ horas = m1.number_input("Horas", min_value=0.0)
 fm_ini = m2.date_input("Inicio Manage", f_ini)
 fm_fin = m3.date_input("Fin Manage", f_fin)
 dur_man = calcular_duracion(fm_ini, fm_fin)
-m4.metric("Meses", dur_man)
+m4.metric("Meses", f"{dur_man:.1f}")
 
 # Cálculo Total Manage
 if is_brazil:
@@ -297,7 +304,9 @@ subtotal = total_serv_final + total_man_final
 val_riesgo = subtotal * contingencia
 total_total = subtotal + val_riesgo
 
-k1, k2, k3 = st.columns(3)
+# Tarjetas: Se eliminó visualmente el campo de "Riesgo" como métrica, 
+# pero el cálculo sigue sumando en 'TOTAL'
+k1, k3 = st.columns(2)
 k1.metric("Subtotal", f"{simbolo} {subtotal:,.2f}")
-k2.metric(f"Riesgo ({contingencia*100:.1f}%)", f"{simbolo} {val_riesgo:,.2f}")
+# k2 (Riesgo) eliminado de la vista
 k3.metric("TOTAL", f"{simbolo} {total_total:,.2f}")

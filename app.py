@@ -254,37 +254,41 @@ with tab_manage:
     row_off_man = df_offering[df_offering['Offering'] == offer_man_sel].iloc[0]
     m_off2.text_input("Info (Manage)", f"{row_off_man.get('L40','-')} | {row_off_man.get('Load in conga','-')}", disabled=True)
 
-    # Fila 2: Configuración Máquina (Alineación 3 columnas: Fuente, Item, Costo)
-    r1, r2, r3 = st.columns([1.5, 2, 1])
+    # Fila 2: Configuración Máquina (Alineación vertical izquierda)
+    # Dividimos en 2 columnas principales: 
+    # r1 (Izquierda): Fuente y Item (uno bajo otro)
+    # r2 (Derecha): Costo Mensual
+    r1, r2 = st.columns([2, 1])
 
-    tipo_fuente = r1.radio("Fuente Datos", ["Machine Category", "Brand Rate Full"])
+    with r1:
+        tipo_fuente = st.radio("Fuente Datos", ["Machine Category", "Brand Rate Full"])
 
-    if tipo_fuente == "Machine Category":
-        df_active = df_lplat
-        col_item_idx = 2 
-    else:
-        df_active = df_lband
-        col_item_idx = 3
-
-    # Filtro Brasil
-    df_filtrado = df_active.copy()
-    if tipo_fuente == "Machine Category" and 'Scope' in df_active.columns:
-        if is_brazil:
-            mask_br = df_active['Scope'].astype(str).str.contains("only Brazil", case=False, na=False)
-            mask_gen = df_active['Scope'].isna() | (df_active['Scope'].astype(str).str.strip() == '') | (df_active['Scope'].astype(str) == 'nan')
-            df_filtrado = df_active[mask_br | mask_gen]
+        if tipo_fuente == "Machine Category":
+            df_active = df_lplat
+            col_item_idx = 2 
         else:
-            mask_br = df_active['Scope'].astype(str).str.contains("only Brazil", case=False, na=False)
-            df_filtrado = df_active[~mask_br]
+            df_active = df_lband
+            col_item_idx = 3
 
-    # Items
-    try:
-        items_disp = df_filtrado.iloc[:, col_item_idx].dropna().unique().tolist()
-    except: items_disp = []
+        # Filtro Brasil
+        df_filtrado = df_active.copy()
+        if tipo_fuente == "Machine Category" and 'Scope' in df_active.columns:
+            if is_brazil:
+                mask_br = df_active['Scope'].astype(str).str.contains("only Brazil", case=False, na=False)
+                mask_gen = df_active['Scope'].isna() | (df_active['Scope'].astype(str).str.strip() == '') | (df_active['Scope'].astype(str) == 'nan')
+                df_filtrado = df_active[mask_br | mask_gen]
+            else:
+                mask_br = df_active['Scope'].astype(str).str.contains("only Brazil", case=False, na=False)
+                df_filtrado = df_active[~mask_br]
 
-    item_maq = r2.selectbox("Item", items_disp)
+        # Items
+        try:
+            items_disp = df_filtrado.iloc[:, col_item_idx].dropna().unique().tolist()
+        except: items_disp = []
 
-    # Precio Mensual
+        item_maq = st.selectbox("Item", items_disp)
+
+    # Precio Mensual (Calculado pero mostrado en r2 para alinear)
     precio_mes_raw = 0.0
     if item_maq:
         try:
@@ -298,14 +302,15 @@ with tab_manage:
         except: pass
 
     # Campo Costo Mensual
-    if is_brazil:
-        base_manage = precio_mes_raw
-        label_mc = "Monthly Cost (BRL)"
-    else:
-        base_manage = precio_mes_raw / tasa_er if tasa_er > 0 else 0.0
-        label_mc = "Monthly Cost (USD)"
+    with r2:
+        if is_brazil:
+            base_manage = precio_mes_raw
+            label_mc = "Monthly Cost (BRL)"
+        else:
+            base_manage = precio_mes_raw / tasa_er if tasa_er > 0 else 0.0
+            label_mc = "Monthly Cost (USD)"
 
-    r3.text_input(label_mc, value=f"{base_manage:,.2f}", disabled=True)
+        st.text_input(label_mc, value=f"{base_manage:,.2f}", disabled=True)
 
     # Fila 3: Inputs Manage (4 Columnas Iguales)
     man1, man2, man3, man4 = st.columns(4)

@@ -11,13 +11,14 @@ st.markdown("""
     /* ESTILO ULTRA COMPACTO Y UNIFORME */
     html, body, [class*="css"]  { font-size: 11px !important; }
     
-    /* TITULO PRINCIPAL MÁS VISIBLE */
+    /* TITULO PRINCIPAL AJUSTADO */
     h1 { 
         font-size: 2.5rem !important; 
         text-align: center !important; 
         color: #0f62fe !important; /* Azul IBM */
+        margin-top: 1rem !important;
         margin-bottom: 0rem !important;
-        padding-top: 0rem !important;
+        padding-top: 1rem !important;
     }
     
     h2 { font-size: 1.2rem !important; margin-top: 0.5rem !important; }
@@ -45,10 +46,15 @@ st.markdown("""
         padding: 0px 8px !important;
     }
 
-    /* Ajustes de espaciado en sidebar y main */
-    section[data-testid="stSidebar"] .block-container { padding-top: 1rem; padding-bottom: 1rem; }
+    /* Ajustes de espaciado en sidebar */
+    section[data-testid="stSidebar"] .block-container { padding-top: 2rem; padding-bottom: 1rem; }
     section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"] { gap: 0.5rem; }
-    .block-container { padding-top: 0.5rem; padding-bottom: 2rem; }
+    
+    /* ESPACIO SUPERIOR DEL CUERPO PRINCIPAL (Evita corte del título) */
+    .block-container { 
+        padding-top: 3rem !important; 
+        padding-bottom: 2rem; 
+    }
     
     /* Métricas */
     .stMetric { background-color: #f0f2f6; padding: 4px 8px; border-radius: 4px; }
@@ -81,9 +87,8 @@ st.markdown("<div style='text-align: center; margin-bottom: 20px;'>Herramienta d
 def clean_decimal(val):
     if pd.isna(val) or val == "": return 0.0
     s_val = str(val).strip().replace("%", "").replace("$", "").replace("USD", "").replace(" ", "")
-    
     try:
-        # LÓGICA ESTÁNDAR (US): 1,234.56
+        # LÓGICA ESTÁNDAR (US): 1,234.56 -> Eliminar coma
         clean = s_val.replace(",", "")
         return float(clean)
     except:
@@ -93,6 +98,7 @@ def clean_decimal(val):
 @st.cache_data
 def load_data():
     try:
+        # Leemos todo como texto para control total
         df_c = pd.read_csv("countries.csv", dtype=str)
         df_o = pd.read_csv("offering.csv", dtype=str)
         df_s = pd.read_csv("slc.csv", dtype=str)
@@ -106,7 +112,7 @@ def load_data():
 df_countries, df_offering, df_slc, df_risk, df_lplat, df_lband = load_data()
 
 if df_countries is None:
-    st.error("⚠️ Error Crítico: Faltan archivos CSV.")
+    st.error("⚠️ Error Crítico: Faltan archivos CSV. Verifica nombres en GitHub.")
     st.stop()
 
 # --- FUNCIONES AUXILIARES ---
@@ -122,7 +128,7 @@ def calcular_duracion(inicio, fin):
 st.sidebar.markdown("---")
 st.sidebar.subheader("📝 Cliente y Contrato")
 
-# ID Automático (Consecutivo en Sesión)
+# ID Automático
 if 'consecutivo_id' not in st.session_state:
     st.session_state.consecutivo_id = 1
 
@@ -191,33 +197,29 @@ st.sidebar.write(f"Contingencia: **{contingencia*100:.1f}%**")
 
 simbolo = "$" if moneda_tipo == "Local" else "USD"
 
-# CREAMOS LAS PESTAÑAS (SHEETS)
+# PESTAÑAS (SHEETS)
 tab_offer, tab_manage = st.tabs(["🛠️ Servicios (Offering)", "💻 Máquinas (Manage)"])
 
 # --- TAB 1: OFFERING ---
 with tab_offer:
     st.caption("Configuración de costos de servicios.")
     
-    # Fila 1: Selección Principal (4 columnas visuales: 3 para Offering, 1 para Info)
+    # Fila 1: Selección Principal (4 columnas: 3 Offering, 1 Info)
     o1, o2 = st.columns([3, 1]) 
     offer_list = df_offering['Offering'].unique()
     offer_sel = o1.selectbox("Offering", offer_list)
     row_off = df_offering[df_offering['Offering'] == offer_sel].iloc[0]
     o2.text_input("Info (L40 | Conga)", f"{row_off.get('L40','-')} | {row_off.get('Load in conga','-')}", disabled=True)
 
-    # Fila 2: Descripción (Ancho completo)
+    # Fila 2: Descripción
     st.text_input("Service Description", placeholder="Detalle del servicio...")
 
-    # Fila 3: Inputs Numéricos (4 Columnas Iguales para alineación)
+    # Fila 3: Inputs Numéricos (4 Columnas Iguales)
     c1, c2, c3, c4 = st.columns(4)
 
-    # Columna 1: Cantidad
     qty = c1.number_input("QTY", min_value=1, value=1)
-
-    # Columna 2: SLC
     slc_op = c2.selectbox("SLC", df_slc['SLC'].unique())
 
-    # Columna 3: UPLF (Métrica)
     uplf = 1.0
     try:
         row_slc = df_slc[df_slc['SLC'] == slc_op]
@@ -226,13 +228,13 @@ with tab_offer:
     except: pass
     c3.metric("UPLF", uplf)
 
-    # Columna 4: Costo Unitario
+    # Costo Unitario (Brasil: Local, Otros: USD)
     if is_brazil:
         costo_input = c4.number_input("Costo Unit. (BRL)", value=0.0, format="%.2f")
     else:
         costo_input = c4.number_input("Costo Unit. (USD)", value=0.0, format="%.2f")
 
-    # Fila 4: Fechas (3 Columnas para que queden alineadas a la izquierda, dejando espacio para el total abajo)
+    # Fila 4: Fechas
     d1, d2, d3 = st.columns(3)
 
     fs_ini = d1.date_input("Inicio Servicio", f_ini)
@@ -250,21 +252,20 @@ with tab_offer:
         total_serv_local = total_serv_usd * tasa_er
         total_serv_final = total_serv_usd if moneda_tipo == "USD" else total_serv_local
 
-    # LINEA DE TOTALIZADOR (Regresada como st.info)
+    # Totalizador
     st.info(f"Total Service: {simbolo} {total_serv_final:,.2f}")
 
 # --- TAB 2: MACHINE / MANAGE ---
 with tab_manage:
     st.caption("Configuración de costos de máquina y gestión.")
     
-    # Fila 1: Offering Manage (Igual que arriba: 3 y 1)
+    # Fila 1: Offering Manage
     m_off1, m_off2 = st.columns([3, 1])
     offer_man_sel = m_off1.selectbox("Offering (Manage)", offer_list, key="offer_man")
     row_off_man = df_offering[df_offering['Offering'] == offer_man_sel].iloc[0]
     m_off2.text_input("Info (Manage)", f"{row_off_man.get('L40','-')} | {row_off_man.get('Load in conga','-')}", disabled=True)
 
-    # Fila 2: Configuración Máquina (Alineación vertical izquierda)
-    # Dividimos en 2 columnas principales: 
+    # Fila 2: Configuración Máquina
     # r1 (Izquierda): Fuente y Item (uno bajo otro)
     # r2 (Derecha): Costo Mensual
     r1, r2 = st.columns([2, 1])
@@ -274,10 +275,10 @@ with tab_manage:
 
         if tipo_fuente == "Machine Category":
             df_active = df_lplat
-            col_item_idx = 2 
+            col_item_idx = 2 # Columna C
         else:
             df_active = df_lband
-            col_item_idx = 3
+            col_item_idx = 3 # Columna D
 
         # Filtro Brasil
         df_filtrado = df_active.copy()
@@ -297,7 +298,7 @@ with tab_manage:
 
         item_maq = st.selectbox("Item", items_disp)
 
-    # Precio Mensual (Calculado pero mostrado en r2 para alinear)
+    # Precio Mensual Raw (Local)
     precio_mes_raw = 0.0
     if item_maq:
         try:
@@ -310,7 +311,7 @@ with tab_manage:
                 precio_mes_raw = clean_decimal(fila[pais].values[0])
         except: pass
 
-    # Campo Costo Mensual
+    # Campo Costo Mensual Visualizado
     with r2:
         if is_brazil:
             base_manage = precio_mes_raw
@@ -321,7 +322,7 @@ with tab_manage:
 
         st.text_input(label_mc, value=f"{base_manage:,.2f}", disabled=True)
 
-    # Fila 3: Inputs Manage (4 Columnas Iguales)
+    # Fila 3: Inputs Manage
     man1, man2, man3, man4 = st.columns(4)
 
     horas = man1.number_input("Horas", min_value=0.0)
@@ -350,7 +351,7 @@ subtotal = total_serv_final + total_man_final
 val_riesgo = subtotal * contingencia
 total_total = subtotal + val_riesgo
 
-# Fila Superior: Subtotales por Categoría
+# Fila Superior: Subtotales por Pestaña
 c_res1, c_res2 = st.columns(2)
 c_res1.metric("Subtotal Offering", f"{simbolo} {total_serv_final:,.2f}")
 c_res2.metric("Subtotal Manage", f"{simbolo} {total_man_final:,.2f}")

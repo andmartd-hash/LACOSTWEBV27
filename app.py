@@ -8,18 +8,41 @@ st.set_page_config(page_title="LACostWeb V29", layout="wide", page_icon="📊")
 
 st.markdown("""
     <style>
-    /* ESTILO ULTRA COMPACTO */
+    /* ESTILO ULTRA COMPACTO Y UNIFORME */
     html, body, [class*="css"]  { font-size: 11px !important; }
+    
     h1 { font-size: 1.4rem !important; margin-bottom: 0.5rem !important; }
     h2 { font-size: 1.2rem !important; margin-top: 0.5rem !important; }
     h3 { font-size: 1.0rem !important; margin-top: 0.5rem !important; }
-    .stSelectbox div[data-baseweb="select"] > div, .stTextInput input, .stNumberInput input, .stDateInput input {
-        font-size: 11px; min-height: 28px; padding: 0px 4px;
+    
+    /* UNIFORMIZAR ALTURA DE TODOS LOS CAMPOS (GROSOR) */
+    .stTextInput div[data-baseweb="input"],
+    .stNumberInput div[data-baseweb="input"],
+    .stSelectbox div[data-baseweb="select"],
+    .stDateInput div[data-baseweb="input"],
+    .stSelectbox div[data-baseweb="select"] > div {
+        height: 30px !important;
+        min-height: 30px !important;
+        border-radius: 4px !important;
+        align-items: center !important;
     }
-    div[data-baseweb="input"] { min-height: 28px; }
+    
+    /* Texto interno de inputs */
+    .stTextInput input, 
+    .stNumberInput input, 
+    .stDateInput input {
+        font-size: 11px !important;
+        height: 30px !important;
+        min-height: 30px !important;
+        padding: 0px 8px !important;
+    }
+
+    /* Ajustes de espaciado en sidebar y main */
     section[data-testid="stSidebar"] .block-container { padding-top: 1rem; padding-bottom: 1rem; }
     section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"] { gap: 0.5rem; }
     .block-container { padding-top: 0.5rem; padding-bottom: 2rem; }
+    
+    /* Métricas */
     .stMetric { background-color: #f0f2f6; padding: 4px 8px; border-radius: 4px; }
     .stMetric label { font-size: 10px !important; }
     .stMetric div[data-testid="stMetricValue"] { font-size: 16px !important; }
@@ -180,8 +203,8 @@ if is_brazil:
 else:
     costo_input = c4.number_input("Costo Unit. (USD)", value=0.0, format="%.2f")
 
-# Fila 4: Fechas y Totales (4 Columnas Iguales)
-d1, d2, d3, d4 = st.columns(4)
+# Fila 4: Fechas (3 Columnas para que queden alineadas a la izquierda, dejando espacio para el total abajo)
+d1, d2, d3 = st.columns(3)
 
 fs_ini = d1.date_input("Inicio Servicio", f_ini)
 fs_fin = d2.date_input("Fin Servicio", f_fin)
@@ -198,8 +221,8 @@ else:
     total_serv_local = total_serv_usd * tasa_er
     total_serv_final = total_serv_usd if moneda_tipo == "USD" else total_serv_local
 
-# Mostrar Total en la 4ta columna como métrica destacada
-d4.metric("Total Servicio", f"{simbolo} {total_serv_final:,.2f}")
+# LINEA DE TOTALIZADOR (Regresada como st.info)
+st.info(f"Total Service: {simbolo} {total_serv_final:,.2f}")
 
 st.markdown("---")
 

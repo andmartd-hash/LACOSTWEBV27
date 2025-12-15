@@ -95,6 +95,9 @@ pais = st.sidebar.selectbox("País", cols_paises)
 
 moneda_tipo = st.sidebar.radio("Moneda", ["USD", "Local"], horizontal=True)
 
+# Lógica Especial Brasil
+is_brazil = (pais == 'Brazil')
+
 # Tasa de Cambio (ER)
 tasa_er = 1.0
 try:
@@ -164,15 +167,32 @@ fs_fin = d_s2.date_input("Fin Servicio", f_fin)
 dur_serv = calcular_duracion(fs_ini, fs_fin)
 d_s3.metric("Meses", dur_serv)
 
-# Costos (ELIMINADO REF LOCAL)
+# Costos - LÓGICA ESTRUCTURAL BRASIL VS OTROS
 u1, _ = st.columns([1, 1])
-costo_unit_usd = u1.number_input("Costo Unitario (USD)", value=0.0, format="%.2f")
 
-# Total Servicio
-total_serv_usd = (costo_unit_usd * dur_serv) * qty * uplf
-total_serv_final = total_serv_usd * tasa_er if moneda_tipo == "Local" else total_serv_usd
+if is_brazil:
+    # BRASIL: Input en LOCAL
+    costo_input = u1.number_input("Costo Unitario (BRL/Local)", value=0.0, format="%.2f")
+    # Cálculos Base Local
+    total_serv_local = (costo_input * dur_serv) * qty * uplf
+    # Conversión a USD si se requiere
+    total_serv_usd = total_serv_local / tasa_er if tasa_er > 0 else 0.0
+    
+    # Selección Final
+    total_serv_final = total_serv_local if moneda_tipo == "Local" else total_serv_usd
+
+else:
+    # OTROS: Input en USD (Estándar)
+    costo_input = u1.number_input("Costo Unitario (USD)", value=0.0, format="%.2f")
+    # Cálculos Base USD
+    total_serv_usd = (costo_input * dur_serv) * qty * uplf
+    # Conversión a Local si se requiere
+    total_serv_local = total_serv_usd * tasa_er
+    
+    # Selección Final
+    total_serv_final = total_serv_usd if moneda_tipo == "USD" else total_serv_local
+
 simbolo = "$" if moneda_tipo == "Local" else "USD"
-
 st.info(f"Total Service: {simbolo} {total_serv_final:,.2f}")
 
 st.markdown("---")
@@ -198,56 +218,54 @@ else:
     df_active = df_lband
     col_item_idx = 3
 
-# --- LÓGICA FILTRADO BRASIL (CORREGIDO) ---
+# --- LÓGICA FILTRADO BRASIL ---
 df_filtrado = df_active.copy()
 
-# Si es Machine Category y tiene columna Scope (índice 0)
 if tipo_fuente == "Machine Category" and 'Scope' in df_active.columns:
-    if pais == 'Brazil':
-        # Filtro: Incluir solo filas donde Scope contenga "only Brazil" O Scope esté vacío/General
-        # Nota: Normalmente si existe "only Brazil", se prioriza.
-        # Aquí permitimos ambos para que aparezcan en la lista, y luego priorizamos precio.
+    if is_brazil:
+        # Priorizar only Brazil o General
         mask_br = df_active['Scope'].astype(str).str.contains("only Brazil", case=False, na=False)
         mask_gen = df_active['Scope'].isna() | (df_active['Scope'].astype(str).str.strip() == '') | (df_active['Scope'].astype(str) == 'nan')
         df_filtrado = df_active[mask_br | mask_gen]
     else:
-        # Filtro: Excluir filas "only Brazil" para otros países
+        # Excluir only Brazil
         mask_br = df_active['Scope'].astype(str).str.contains("only Brazil", case=False, na=False)
         df_filtrado = df_active[~mask_br]
 
-# Cargar Items (Del Dataframe Filtrado)
+# Cargar Items
 try:
     items_disp = df_filtrado.iloc[:, col_item_idx].dropna().unique().tolist()
 except: items_disp = []
 
 item_maq = rad2.selectbox("Item", items_disp)
 
-# Buscar Precio Mensual (Local)
+# Buscar Precio Mensual (Local del CSV)
 precio_mes_raw = 0.0
 if item_maq:
     try:
-        # 1. Filtrar por Item en el DF filtrado
         fila = df_filtrado[df_filtrado.iloc[:, col_item_idx] == item_maq]
         
-        # 2. Lógica de Prioridad "Only Brazil"
-        if pais == 'Brazil' and not fila.empty and 'Scope' in fila.columns:
+        # Prioridad explícita fila Brazil si existe duplicado
+        if is_brazil and 'Scope' in fila.columns:
             fila_br = fila[fila['Scope'].astype(str).str.contains("only Brazil", case=False, na=False)]
-            if not fila_br.empty:
-                fila = fila_br # Tomamos la fila específica de Brasil si existe
+            if not fila_br.empty: fila = fila_br
         
-        # 3. Extraer precio
         if not fila.empty and pais in fila.columns:
             precio_mes_raw = clean_decimal(fila[pais].values[0])
     except: pass
 
-# Convertir SIEMPRE a USD para Monthly Cost
-if tasa_er > 0:
-    precio_mes_usd = precio_mes_raw / tasa_er
+# --- MANEJO DE COSTO MENSUAL (Estructura) ---
+if is_brazil:
+    # BRASIL: Manejar en Local
+    base_manage = precio_mes_raw
+    label_mc = "Monthly Cost (BRL/Local)"
 else:
-    precio_mes_usd = 0.0
+    # OTROS: Manejar en USD (Convertir Local->USD para base)
+    base_manage = precio_mes_raw / tasa_er if tasa_er > 0 else 0.0
+    label_mc = "Monthly Cost (USD)"
 
-# Campo Monthly Cost
-rad3.text_input("Monthly Cost (USD)", value=f"{precio_mes_usd:,.2f}", disabled=True)
+# Visualizar Base
+rad3.text_input(label_mc, value=f"{base_manage:,.2f}", disabled=True)
 
 # Manage Inputs
 m1, m2, m3, m4, _ = st.columns([1, 1, 1, 1, 2])
@@ -258,8 +276,16 @@ dur_man = calcular_duracion(fm_ini, fm_fin)
 m4.metric("Meses", dur_man)
 
 # Cálculo Total Manage
-total_man_usd = precio_mes_usd * horas * dur_man
-total_man_final = total_man_usd * tasa_er if moneda_tipo == "Local" else total_man_usd
+if is_brazil:
+    # Base Local -> Total Local -> Convertir a USD si aplica
+    total_man_local = base_manage * horas * dur_man
+    total_man_usd = total_man_local / tasa_er if tasa_er > 0 else 0.0
+    total_man_final = total_man_local if moneda_tipo == "Local" else total_man_usd
+else:
+    # Base USD -> Total USD -> Convertir a Local si aplica
+    total_man_usd = base_manage * horas * dur_man
+    total_man_local = total_man_usd * tasa_er
+    total_man_final = total_man_usd if moneda_tipo == "USD" else total_man_local
 
 st.info(f"Total Manage: {simbolo} {total_man_final:,.2f}")
 

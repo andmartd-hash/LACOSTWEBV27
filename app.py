@@ -11,7 +11,15 @@ st.markdown("""
     /* ESTILO ULTRA COMPACTO Y UNIFORME */
     html, body, [class*="css"]  { font-size: 11px !important; }
     
-    h1 { font-size: 1.4rem !important; margin-bottom: 0.5rem !important; }
+    /* TITULO PRINCIPAL MÁS VISIBLE */
+    h1 { 
+        font-size: 2.5rem !important; 
+        text-align: center !important; 
+        color: #0f62fe !important; /* Azul IBM */
+        margin-bottom: 0rem !important;
+        padding-top: 0rem !important;
+    }
+    
     h2 { font-size: 1.2rem !important; margin-top: 0.5rem !important; }
     h3 { font-size: 1.0rem !important; margin-top: 0.5rem !important; }
     
@@ -65,8 +73,9 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
+# TÍTULO CENTRADO
 st.title("📊 LACostWeb V29")
-st.markdown("Herramienta de costeo **UI_CONFIG V19**.")
+st.markdown("<div style='text-align: center; margin-bottom: 20px;'>Herramienta de costeo <b>UI_CONFIG V19</b></div>", unsafe_allow_html=True)
 
 # --- FUNCIÓN DE LIMPIEZA DE DATOS ---
 def clean_decimal(val):

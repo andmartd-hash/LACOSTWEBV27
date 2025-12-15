@@ -32,12 +32,10 @@ st.markdown("Herramienta de costeo **UI_CONFIG V19**.")
 # --- FUNCIÓN DE LIMPIEZA DE DATOS ---
 def clean_decimal(val):
     if pd.isna(val) or val == "": return 0.0
-    # Limpieza de símbolos básicos
     s_val = str(val).strip().replace("%", "").replace("$", "").replace("USD", "").replace(" ", "")
     
     try:
         # LÓGICA ESTÁNDAR (US): 1,234.56
-        # Eliminamos comas de miles, mantenemos punto decimal
         clean = s_val.replace(",", "")
         return float(clean)
     except:
@@ -47,7 +45,6 @@ def clean_decimal(val):
 @st.cache_data
 def load_data():
     try:
-        # LEEMOS TODO COMO TEXTO (dtype=str) PARA EVITAR ERRORES DE PARSEO
         df_c = pd.read_csv("countries.csv", dtype=str)
         df_o = pd.read_csv("offering.csv", dtype=str)
         df_s = pd.read_csv("slc.csv", dtype=str)
@@ -71,17 +68,17 @@ def calcular_duracion(inicio, fin):
     return max(1, meses)
 
 # ==========================================
-# BARRA LATERAL (SIDEBAR) - DATOS Y CONFIG
+# BARRA LATERAL
 # ==========================================
 st.sidebar.markdown("---")
 st.sidebar.subheader("📝 Cliente y Contrato")
 
-# 1. ID y Cliente
+# ID y Cliente
 id_cot = st.sidebar.text_input("ID Cotización", "COT-2025-V29")
 c_name = st.sidebar.text_input("Nombre Cliente")
 c_num = st.sidebar.text_input("Número Cliente")
 
-# 2. Fechas Contrato
+# Fechas Contrato
 col_d1, col_d2 = st.sidebar.columns(2)
 f_ini = col_d1.date_input("Inicio Contrato", date.today())
 f_fin = col_d2.date_input("Fin Contrato", date.today().replace(year=date.today().year + 1))
@@ -92,13 +89,13 @@ st.sidebar.info(f"📅 Duración Contrato: **{dur_contrato} Meses**")
 st.sidebar.markdown("---")
 st.sidebar.subheader("🌎 Parámetros Económicos")
 
-# 3. País y Moneda
+# País y Moneda
 cols_paises = [c for c in df_countries.columns if c not in ['Scope', 'Country', 'Unnamed: 0', 'Currency', 'ER', 'Tax']]
 pais = st.sidebar.selectbox("País", cols_paises)
 
 moneda_tipo = st.sidebar.radio("Moneda", ["USD", "Local"], horizontal=True)
 
-# 4. Tasa de Cambio (ER)
+# Tasa de Cambio (ER)
 tasa_er = 1.0
 try:
     row_er = df_countries[df_countries['Country'].astype(str).str.contains("ER", case=False, na=False)]
@@ -112,7 +109,7 @@ if moneda_tipo == "Local":
 else:
     st.sidebar.success("Base: USD")
 
-# 5. Riesgo
+# Riesgo
 riesgos_disp = df_risk['Risk'].unique()
 riesgo_sel = st.sidebar.selectbox("Nivel Riesgo", riesgos_disp)
 
@@ -167,10 +164,9 @@ fs_fin = d_s2.date_input("Fin Servicio", f_fin)
 dur_serv = calcular_duracion(fs_ini, fs_fin)
 d_s3.metric("Meses", dur_serv)
 
-# Costos
-u1, u2, _ = st.columns([1, 1, 1])
+# Costos (ELIMINADO REF LOCAL)
+u1, _ = st.columns([1, 1])
 costo_unit_usd = u1.number_input("Costo Unitario (USD)", value=0.0, format="%.2f")
-u2.text_input(f"Ref. Local ({pais})", value=f"{costo_unit_usd * tasa_er:,.2f}", disabled=True)
 
 # Total Servicio
 total_serv_usd = (costo_unit_usd * dur_serv) * qty * uplf
@@ -197,16 +193,31 @@ tipo_fuente = rad1.radio("Fuente Datos", ["Machine Category", "Brand Rate Full"]
 
 if tipo_fuente == "Machine Category":
     df_active = df_lplat
-    # LPLAT (C): Columna 2
     col_item_idx = 2 
 else:
     df_active = df_lband
-    # LBAND (D): Columna 3
     col_item_idx = 3
 
-# Cargar Items
+# --- LÓGICA FILTRADO BRASIL (CORREGIDO) ---
+df_filtrado = df_active.copy()
+
+# Si es Machine Category y tiene columna Scope (índice 0)
+if tipo_fuente == "Machine Category" and 'Scope' in df_active.columns:
+    if pais == 'Brazil':
+        # Filtro: Incluir solo filas donde Scope contenga "only Brazil" O Scope esté vacío/General
+        # Nota: Normalmente si existe "only Brazil", se prioriza.
+        # Aquí permitimos ambos para que aparezcan en la lista, y luego priorizamos precio.
+        mask_br = df_active['Scope'].astype(str).str.contains("only Brazil", case=False, na=False)
+        mask_gen = df_active['Scope'].isna() | (df_active['Scope'].astype(str).str.strip() == '') | (df_active['Scope'].astype(str) == 'nan')
+        df_filtrado = df_active[mask_br | mask_gen]
+    else:
+        # Filtro: Excluir filas "only Brazil" para otros países
+        mask_br = df_active['Scope'].astype(str).str.contains("only Brazil", case=False, na=False)
+        df_filtrado = df_active[~mask_br]
+
+# Cargar Items (Del Dataframe Filtrado)
 try:
-    items_disp = df_active.iloc[:, col_item_idx].dropna().unique().tolist()
+    items_disp = df_filtrado.iloc[:, col_item_idx].dropna().unique().tolist()
 except: items_disp = []
 
 item_maq = rad2.selectbox("Item", items_disp)
@@ -215,19 +226,27 @@ item_maq = rad2.selectbox("Item", items_disp)
 precio_mes_raw = 0.0
 if item_maq:
     try:
-        fila = df_active[df_active.iloc[:, col_item_idx] == item_maq]
+        # 1. Filtrar por Item en el DF filtrado
+        fila = df_filtrado[df_filtrado.iloc[:, col_item_idx] == item_maq]
+        
+        # 2. Lógica de Prioridad "Only Brazil"
+        if pais == 'Brazil' and not fila.empty and 'Scope' in fila.columns:
+            fila_br = fila[fila['Scope'].astype(str).str.contains("only Brazil", case=False, na=False)]
+            if not fila_br.empty:
+                fila = fila_br # Tomamos la fila específica de Brasil si existe
+        
+        # 3. Extraer precio
         if not fila.empty and pais in fila.columns:
-            # Aquí aplicamos clean_decimal en modo US/Standard por defecto
             precio_mes_raw = clean_decimal(fila[pais].values[0])
     except: pass
 
-# Convertir SIEMPRE a USD para el campo "Monthly Cost (USD)"
+# Convertir SIEMPRE a USD para Monthly Cost
 if tasa_er > 0:
     precio_mes_usd = precio_mes_raw / tasa_er
 else:
     precio_mes_usd = 0.0
 
-# Campo Monthly Cost (Visualiza Costo Machine en USD)
+# Campo Monthly Cost
 rad3.text_input("Monthly Cost (USD)", value=f"{precio_mes_usd:,.2f}", disabled=True)
 
 # Manage Inputs

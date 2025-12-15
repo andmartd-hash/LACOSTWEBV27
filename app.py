@@ -46,6 +46,22 @@ st.markdown("""
     .stMetric { background-color: #f0f2f6; padding: 4px 8px; border-radius: 4px; }
     .stMetric label { font-size: 10px !important; }
     .stMetric div[data-testid="stMetricValue"] { font-size: 16px !important; }
+    
+    /* Estilo de Tabs */
+    .stTabs [data-baseweb="tab-list"] { gap: 8px; }
+    .stTabs [data-baseweb="tab"] {
+        height: 40px;
+        white-space: pre-wrap;
+        background-color: #f0f2f6;
+        border-radius: 4px 4px 0px 0px;
+        gap: 1px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #e6f3ff;
+        border-bottom: 2px solid #0f62fe;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -166,148 +182,151 @@ st.sidebar.write(f"Contingencia: **{contingencia*100:.1f}%**")
 
 simbolo = "$" if moneda_tipo == "Local" else "USD"
 
-# --- 1. OFFERING ---
-st.subheader("🛠️ 1. Offering / Service Cost")
+# CREAMOS LAS PESTAÑAS (SHEETS)
+tab_offer, tab_manage = st.tabs(["🛠️ Servicios (Offering)", "💻 Máquinas (Manage)"])
 
-# Fila 1: Selección Principal (4 columnas visuales: 3 para Offering, 1 para Info)
-o1, o2 = st.columns([3, 1]) 
-offer_list = df_offering['Offering'].unique()
-offer_sel = o1.selectbox("Offering", offer_list)
-row_off = df_offering[df_offering['Offering'] == offer_sel].iloc[0]
-o2.text_input("Info (L40 | Conga)", f"{row_off.get('L40','-')} | {row_off.get('Load in conga','-')}", disabled=True)
+# --- TAB 1: OFFERING ---
+with tab_offer:
+    st.caption("Configuración de costos de servicios.")
+    
+    # Fila 1: Selección Principal (4 columnas visuales: 3 para Offering, 1 para Info)
+    o1, o2 = st.columns([3, 1]) 
+    offer_list = df_offering['Offering'].unique()
+    offer_sel = o1.selectbox("Offering", offer_list)
+    row_off = df_offering[df_offering['Offering'] == offer_sel].iloc[0]
+    o2.text_input("Info (L40 | Conga)", f"{row_off.get('L40','-')} | {row_off.get('Load in conga','-')}", disabled=True)
 
-# Fila 2: Descripción (Ancho completo)
-st.text_input("Service Description", placeholder="Detalle del servicio...")
+    # Fila 2: Descripción (Ancho completo)
+    st.text_input("Service Description", placeholder="Detalle del servicio...")
 
-# Fila 3: Inputs Numéricos (4 Columnas Iguales para alineación)
-c1, c2, c3, c4 = st.columns(4)
+    # Fila 3: Inputs Numéricos (4 Columnas Iguales para alineación)
+    c1, c2, c3, c4 = st.columns(4)
 
-# Columna 1: Cantidad
-qty = c1.number_input("QTY", min_value=1, value=1)
+    # Columna 1: Cantidad
+    qty = c1.number_input("QTY", min_value=1, value=1)
 
-# Columna 2: SLC
-slc_op = c2.selectbox("SLC", df_slc['SLC'].unique())
+    # Columna 2: SLC
+    slc_op = c2.selectbox("SLC", df_slc['SLC'].unique())
 
-# Columna 3: UPLF (Métrica)
-uplf = 1.0
-try:
-    row_slc = df_slc[df_slc['SLC'] == slc_op]
-    if not row_slc.empty:
-        uplf = clean_decimal(row_slc['UPLF'].values[0])
-except: pass
-c3.metric("UPLF", uplf)
-
-# Columna 4: Costo Unitario
-if is_brazil:
-    costo_input = c4.number_input("Costo Unit. (BRL)", value=0.0, format="%.2f")
-else:
-    costo_input = c4.number_input("Costo Unit. (USD)", value=0.0, format="%.2f")
-
-# Fila 4: Fechas (3 Columnas para que queden alineadas a la izquierda, dejando espacio para el total abajo)
-d1, d2, d3 = st.columns(3)
-
-fs_ini = d1.date_input("Inicio Servicio", f_ini)
-fs_fin = d2.date_input("Fin Servicio", f_fin)
-dur_serv = calcular_duracion(fs_ini, fs_fin)
-d3.metric("Duración (Meses)", f"{dur_serv:.1f}")
-
-# Cálculo Total Servicio
-if is_brazil:
-    total_serv_local = (costo_input * dur_serv) * qty * uplf
-    total_serv_usd = total_serv_local / tasa_er if tasa_er > 0 else 0.0
-    total_serv_final = total_serv_local if moneda_tipo == "Local" else total_serv_usd
-else:
-    total_serv_usd = (costo_input * dur_serv) * qty * uplf
-    total_serv_local = total_serv_usd * tasa_er
-    total_serv_final = total_serv_usd if moneda_tipo == "USD" else total_serv_local
-
-# LINEA DE TOTALIZADOR (Regresada como st.info)
-st.info(f"Total Service: {simbolo} {total_serv_final:,.2f}")
-
-st.markdown("---")
-
-# --- 2. MACHINE / MANAGE ---
-st.subheader("💻 2. Machine & Manage Cost")
-
-# Fila 1: Offering Manage (Igual que arriba: 3 y 1)
-m_off1, m_off2 = st.columns([3, 1])
-offer_man_sel = m_off1.selectbox("Offering (Manage)", offer_list, key="offer_man")
-row_off_man = df_offering[df_offering['Offering'] == offer_man_sel].iloc[0]
-m_off2.text_input("Info (Manage)", f"{row_off_man.get('L40','-')} | {row_off_man.get('Load in conga','-')}", disabled=True)
-
-# Fila 2: Configuración Máquina (Alineación 3 columnas: Fuente, Item, Costo)
-r1, r2, r3 = st.columns([1.5, 2, 1])
-
-tipo_fuente = r1.radio("Fuente Datos", ["Machine Category", "Brand Rate Full"])
-
-if tipo_fuente == "Machine Category":
-    df_active = df_lplat
-    col_item_idx = 2 
-else:
-    df_active = df_lband
-    col_item_idx = 3
-
-# Filtro Brasil
-df_filtrado = df_active.copy()
-if tipo_fuente == "Machine Category" and 'Scope' in df_active.columns:
-    if is_brazil:
-        mask_br = df_active['Scope'].astype(str).str.contains("only Brazil", case=False, na=False)
-        mask_gen = df_active['Scope'].isna() | (df_active['Scope'].astype(str).str.strip() == '') | (df_active['Scope'].astype(str) == 'nan')
-        df_filtrado = df_active[mask_br | mask_gen]
-    else:
-        mask_br = df_active['Scope'].astype(str).str.contains("only Brazil", case=False, na=False)
-        df_filtrado = df_active[~mask_br]
-
-# Items
-try:
-    items_disp = df_filtrado.iloc[:, col_item_idx].dropna().unique().tolist()
-except: items_disp = []
-
-item_maq = r2.selectbox("Item", items_disp)
-
-# Precio Mensual
-precio_mes_raw = 0.0
-if item_maq:
+    # Columna 3: UPLF (Métrica)
+    uplf = 1.0
     try:
-        fila = df_filtrado[df_filtrado.iloc[:, col_item_idx] == item_maq]
-        if is_brazil and 'Scope' in fila.columns:
-            fila_br = fila[fila['Scope'].astype(str).str.contains("only Brazil", case=False, na=False)]
-            if not fila_br.empty: fila = fila_br
-        
-        if not fila.empty and pais in fila.columns:
-            precio_mes_raw = clean_decimal(fila[pais].values[0])
+        row_slc = df_slc[df_slc['SLC'] == slc_op]
+        if not row_slc.empty:
+            uplf = clean_decimal(row_slc['UPLF'].values[0])
     except: pass
+    c3.metric("UPLF", uplf)
 
-# Campo Costo Mensual
-if is_brazil:
-    base_manage = precio_mes_raw
-    label_mc = "Monthly Cost (BRL)"
-else:
-    base_manage = precio_mes_raw / tasa_er if tasa_er > 0 else 0.0
-    label_mc = "Monthly Cost (USD)"
+    # Columna 4: Costo Unitario
+    if is_brazil:
+        costo_input = c4.number_input("Costo Unit. (BRL)", value=0.0, format="%.2f")
+    else:
+        costo_input = c4.number_input("Costo Unit. (USD)", value=0.0, format="%.2f")
 
-r3.text_input(label_mc, value=f"{base_manage:,.2f}", disabled=True)
+    # Fila 4: Fechas (3 Columnas para que queden alineadas a la izquierda, dejando espacio para el total abajo)
+    d1, d2, d3 = st.columns(3)
 
-# Fila 3: Inputs Manage (4 Columnas Iguales)
-man1, man2, man3, man4 = st.columns(4)
+    fs_ini = d1.date_input("Inicio Servicio", f_ini)
+    fs_fin = d2.date_input("Fin Servicio", f_fin)
+    dur_serv = calcular_duracion(fs_ini, fs_fin)
+    d3.metric("Duración (Meses)", f"{dur_serv:.1f}")
 
-horas = man1.number_input("Horas", min_value=0.0)
-fm_ini = man2.date_input("Inicio Manage", f_ini)
-fm_fin = man3.date_input("Fin Manage", f_fin)
-dur_man = calcular_duracion(fm_ini, fm_fin)
-man4.metric("Duración (Meses)", f"{dur_man:.1f}")
+    # Cálculo Total Servicio
+    if is_brazil:
+        total_serv_local = (costo_input * dur_serv) * qty * uplf
+        total_serv_usd = total_serv_local / tasa_er if tasa_er > 0 else 0.0
+        total_serv_final = total_serv_local if moneda_tipo == "Local" else total_serv_usd
+    else:
+        total_serv_usd = (costo_input * dur_serv) * qty * uplf
+        total_serv_local = total_serv_usd * tasa_er
+        total_serv_final = total_serv_usd if moneda_tipo == "USD" else total_serv_local
 
-# Cálculo Total Manage
-if is_brazil:
-    total_man_local = base_manage * horas * dur_man
-    total_man_usd = total_man_local / tasa_er if tasa_er > 0 else 0.0
-    total_man_final = total_man_local if moneda_tipo == "Local" else total_man_usd
-else:
-    total_man_usd = base_manage * horas * dur_man
-    total_man_local = total_man_usd * tasa_er
-    total_man_final = total_man_usd if moneda_tipo == "USD" else total_man_local
+    # LINEA DE TOTALIZADOR (Regresada como st.info)
+    st.info(f"Total Service: {simbolo} {total_serv_final:,.2f}")
 
-st.info(f"Total Manage: {simbolo} {total_man_final:,.2f}")
+# --- TAB 2: MACHINE / MANAGE ---
+with tab_manage:
+    st.caption("Configuración de costos de máquina y gestión.")
+    
+    # Fila 1: Offering Manage (Igual que arriba: 3 y 1)
+    m_off1, m_off2 = st.columns([3, 1])
+    offer_man_sel = m_off1.selectbox("Offering (Manage)", offer_list, key="offer_man")
+    row_off_man = df_offering[df_offering['Offering'] == offer_man_sel].iloc[0]
+    m_off2.text_input("Info (Manage)", f"{row_off_man.get('L40','-')} | {row_off_man.get('Load in conga','-')}", disabled=True)
+
+    # Fila 2: Configuración Máquina (Alineación 3 columnas: Fuente, Item, Costo)
+    r1, r2, r3 = st.columns([1.5, 2, 1])
+
+    tipo_fuente = r1.radio("Fuente Datos", ["Machine Category", "Brand Rate Full"])
+
+    if tipo_fuente == "Machine Category":
+        df_active = df_lplat
+        col_item_idx = 2 
+    else:
+        df_active = df_lband
+        col_item_idx = 3
+
+    # Filtro Brasil
+    df_filtrado = df_active.copy()
+    if tipo_fuente == "Machine Category" and 'Scope' in df_active.columns:
+        if is_brazil:
+            mask_br = df_active['Scope'].astype(str).str.contains("only Brazil", case=False, na=False)
+            mask_gen = df_active['Scope'].isna() | (df_active['Scope'].astype(str).str.strip() == '') | (df_active['Scope'].astype(str) == 'nan')
+            df_filtrado = df_active[mask_br | mask_gen]
+        else:
+            mask_br = df_active['Scope'].astype(str).str.contains("only Brazil", case=False, na=False)
+            df_filtrado = df_active[~mask_br]
+
+    # Items
+    try:
+        items_disp = df_filtrado.iloc[:, col_item_idx].dropna().unique().tolist()
+    except: items_disp = []
+
+    item_maq = r2.selectbox("Item", items_disp)
+
+    # Precio Mensual
+    precio_mes_raw = 0.0
+    if item_maq:
+        try:
+            fila = df_filtrado[df_filtrado.iloc[:, col_item_idx] == item_maq]
+            if is_brazil and 'Scope' in fila.columns:
+                fila_br = fila[fila['Scope'].astype(str).str.contains("only Brazil", case=False, na=False)]
+                if not fila_br.empty: fila = fila_br
+            
+            if not fila.empty and pais in fila.columns:
+                precio_mes_raw = clean_decimal(fila[pais].values[0])
+        except: pass
+
+    # Campo Costo Mensual
+    if is_brazil:
+        base_manage = precio_mes_raw
+        label_mc = "Monthly Cost (BRL)"
+    else:
+        base_manage = precio_mes_raw / tasa_er if tasa_er > 0 else 0.0
+        label_mc = "Monthly Cost (USD)"
+
+    r3.text_input(label_mc, value=f"{base_manage:,.2f}", disabled=True)
+
+    # Fila 3: Inputs Manage (4 Columnas Iguales)
+    man1, man2, man3, man4 = st.columns(4)
+
+    horas = man1.number_input("Horas", min_value=0.0)
+    fm_ini = man2.date_input("Inicio Manage", f_ini)
+    fm_fin = man3.date_input("Fin Manage", f_fin)
+    dur_man = calcular_duracion(fm_ini, fm_fin)
+    man4.metric("Duración (Meses)", f"{dur_man:.1f}")
+
+    # Cálculo Total Manage
+    if is_brazil:
+        total_man_local = base_manage * horas * dur_man
+        total_man_usd = total_man_local / tasa_er if tasa_er > 0 else 0.0
+        total_man_final = total_man_local if moneda_tipo == "Local" else total_man_usd
+    else:
+        total_man_usd = base_manage * horas * dur_man
+        total_man_local = total_man_usd * tasa_er
+        total_man_final = total_man_usd if moneda_tipo == "USD" else total_man_local
+
+    st.info(f"Total Manage: {simbolo} {total_man_final:,.2f}")
 
 st.markdown("---")
 

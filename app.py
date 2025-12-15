@@ -336,6 +336,13 @@ subtotal = total_serv_final + total_man_final
 val_riesgo = subtotal * contingencia
 total_total = subtotal + val_riesgo
 
+# Fila Superior: Subtotales por Categoría
+c_res1, c_res2 = st.columns(2)
+c_res1.metric("Subtotal Offering", f"{simbolo} {total_serv_final:,.2f}")
+c_res2.metric("Subtotal Manage", f"{simbolo} {total_man_final:,.2f}")
+
+# Fila Inferior: Totales Generales
+st.divider()
 k1, k3 = st.columns(2)
-k1.metric("Subtotal", f"{simbolo} {subtotal:,.2f}")
-k3.metric("TOTAL", f"{simbolo} {total_total:,.2f}")
+k1.metric("Subtotal General", f"{simbolo} {subtotal:,.2f}")
+k3.metric("TOTAL FINAL (Inc. Riesgo)", f"{simbolo} {total_total:,.2f}")

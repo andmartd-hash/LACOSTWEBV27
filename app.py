@@ -145,7 +145,7 @@ st.sidebar.write(f"Contingencia: **{contingencia*100:.1f}%**")
 st.subheader("🛠️ 1. Offering / Service Cost")
 
 # Fila 1
-o1, o2, _ = st.columns([1, 1, 8]) 
+o1, o2, _ = st.columns([2.5, 1.5, 8]) 
 offer_list = df_offering['Offering'].unique()
 offer_sel = o1.selectbox("Offering", offer_list)
 row_off = df_offering[df_offering['Offering'] == offer_sel].iloc[0]
@@ -310,6 +310,7 @@ k1, k3 = st.columns(2)
 k1.metric("Subtotal", f"{simbolo} {subtotal:,.2f}")
 # k2 (Riesgo) eliminado de la vista
 k3.metric("TOTAL", f"{simbolo} {total_total:,.2f}")
+
 
 
 

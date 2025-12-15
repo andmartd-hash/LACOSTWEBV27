@@ -50,7 +50,7 @@ st.markdown("""
     section[data-testid="stSidebar"] .block-container { padding-top: 2rem; padding-bottom: 1rem; }
     section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"] { gap: 0.5rem; }
     
-    /* ESPACIO SUPERIOR DEL CUERPO PRINCIPAL (Evita corte del título) */
+    /* ESPACIO SUPERIOR DEL CUERPO PRINCIPAL */
     .block-container { 
         padding-top: 3rem !important; 
         padding-bottom: 2rem; 
@@ -204,7 +204,7 @@ tab_offer, tab_manage = st.tabs(["🛠️ Servicios (Offering)", "💻 Máquinas
 with tab_offer:
     st.caption("Configuración de costos de servicios.")
     
-    # Fila 1: Selección Principal (4 columnas: 3 Offering, 1 Info)
+    # Fila 1: Selección Principal
     o1, o2 = st.columns([3, 1]) 
     offer_list = df_offering['Offering'].unique()
     offer_sel = o1.selectbox("Offering", offer_list)
@@ -214,12 +214,17 @@ with tab_offer:
     # Fila 2: Descripción
     st.text_input("Service Description", placeholder="Detalle del servicio...")
 
-    # Fila 3: Inputs Numéricos (4 Columnas Iguales)
-    c1, c2, c3, c4 = st.columns(4)
+    # Fila 3: Inputs Numéricos (Ajuste de anchos para QTY/SLC/UPLF)
+    # Proporción ajustada [1, 2, 1, 2] para que QTY y UPLF sean más compactos
+    c1, c2, c3, c4 = st.columns([1, 2, 1, 2])
 
+    # Columna 1: Cantidad (Pequeña)
     qty = c1.number_input("QTY", min_value=1, value=1)
+
+    # Columna 2: SLC (Mediana, nombres largos)
     slc_op = c2.selectbox("SLC", df_slc['SLC'].unique())
 
+    # Columna 3: UPLF (Pequeña, solo es un factor)
     uplf = 1.0
     try:
         row_slc = df_slc[df_slc['SLC'] == slc_op]
@@ -228,7 +233,7 @@ with tab_offer:
     except: pass
     c3.metric("UPLF", uplf)
 
-    # Costo Unitario (Brasil: Local, Otros: USD)
+    # Columna 4: Costo Unitario (Mediana)
     if is_brazil:
         costo_input = c4.number_input("Costo Unit. (BRL)", value=0.0, format="%.2f")
     else:
